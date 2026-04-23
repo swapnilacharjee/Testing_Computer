@@ -444,9 +444,9 @@
                 // Detect offline: if last_seen > 30 seconds ago
                 let isOnline = false;
                 if (esp.last_seen) {
-                    const lastSeen = new Date(esp.last_seen.replace(' ', 'T') + '+06:00');
+                    const lastSeen = new Date(esp.last_seen.replace(' ', 'T'));
                     const diffSec  = (Date.now() - lastSeen.getTime()) / 1000;
-                    isOnline = diffSec < 30;
+                    isOnline = Math.abs(diffSec) < 30;
                 }
 
                 if (isOnline) {
