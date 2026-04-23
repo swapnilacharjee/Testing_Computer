@@ -441,9 +441,12 @@
                 const esp = data.esp32;
                 const espEl = document.getElementById('espStatus');
 
-                // Detect offline: if last_seen > 30 seconds ago
+                // Detect offline: if last_seen_unix > 30 seconds ago
                 let isOnline = false;
-                if (esp.last_seen) {
+                if (esp.last_seen_unix) {
+                    const diffSec = (Date.now() / 1000) - esp.last_seen_unix;
+                    isOnline = diffSec < 30;
+                } else if (esp.last_seen) {
                     const lastSeen = new Date(esp.last_seen.replace(' ', 'T'));
                     const diffSec  = (Date.now() - lastSeen.getTime()) / 1000;
                     isOnline = Math.abs(diffSec) < 30;
