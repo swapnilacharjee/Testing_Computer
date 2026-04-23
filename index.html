@@ -445,11 +445,11 @@
                 let isOnline = false;
                 if (esp.last_seen_unix) {
                     const diffSec = (Date.now() / 1000) - esp.last_seen_unix;
-                    isOnline = diffSec < 30;
+                    isOnline = diffSec < 15;
                 } else if (esp.last_seen) {
                     const lastSeen = new Date(esp.last_seen.replace(' ', 'T'));
                     const diffSec  = (Date.now() - lastSeen.getTime()) / 1000;
-                    isOnline = Math.abs(diffSec) < 30;
+                    isOnline = Math.abs(diffSec) < 15;
                 }
 
                 if (isOnline) {
@@ -656,7 +656,7 @@
     fetchUsage();
     fetchEnergy();
     fetchHistory();
-    setInterval(fetchLive,    5000);
+    setInterval(fetchLive,    2000);
     setInterval(fetchUsage,   30000);
     setInterval(fetchEnergy,  30000);
     setInterval(fetchHistory, 30000);
