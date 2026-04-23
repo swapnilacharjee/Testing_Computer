@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PC Power Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:        #060818;
+            --surface:   rgba(255,255,255,0.04);
+            --border:    rgba(255,255,255,0.08);
+            --blue:      #3b82f6;
+            --cyan:      #06b6d4;
+            --green:     #22c55e;
+            --red:       #ef4444;
+            --yellow:    #facc15;
+            --orange:    #f97316;
+            --text:      #f1f5f9;
+            --muted:     #64748b;
+            --card-glow: rgba(59,130,246,0.15);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ── BACKGROUND ── */
+        body::before {
+            content: '';
+            position: fixed; inset: 0; z-index: 0;
+            background:
+                radial-gradient(ellipse 80% 50% at 20% 10%, rgba(59,130,246,0.12) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 80% 80%, rgba(6,182,212,0.10) 0%, transparent 60%),
+                radial-gradient(ellipse 40% 30% at 50% 50%, rgba(139,92,246,0.06) 0%, transparent 60%);
+            pointer-events: none;
+        }
+
+        .wrap { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 32px 20px 60px; }
+
+        /* ── HEADER ── */
+        header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 40px; flex-wrap: wrap; gap: 16px;
+        }
+        .logo { display: flex; align-items: center; gap: 12px; }
+        .logo-icon {
+            width: 44px; height: 44px; border-radius: 12px;
+            background: linear-gradient(135deg, var(--blue), var(--cyan));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px; box-shadow: 0 0 24px rgba(59,130,246,0.4);
+        }
+        .logo-text h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+        .logo-text p  { font-size: 12px; color: var(--muted); }
+
+        .live-badge {
+            display: flex; align-items: center; gap: 8px;
+            background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.25);
+            padding: 8px 16px; border-radius: 100px; font-size: 13px; color: var(--green);
+        }
+        .live-dot {
+            width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%,100% { opacity: 1; transform: scale(1); }
+            50%      { opacity: 0.4; transform: scale(0.8); }
+        }
+
+        /* ── STATUS HERO ── */
+        .hero {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 32px;
+            margin-bottom: 20px;
+            display: flex; align-items: center; justify-content: space-between;
+            flex-wrap: wrap; gap: 20px;
+            backdrop-filter: blur(12px);
+            position: relative; overflow: hidden;
+        }
+        .hero::before {
+            content: '';
+            position: absolute; top: -60px; right: -60px;
+            width: 200px; height: 200px; border-radius: 50%;
+            background: radial-gradient(circle, rgba(59,130,246,0.15), transparent 70%);
+            pointer-events: none;
+        }
+        .hero-left { display: flex; align-items: center; gap: 20px; }
+        .status-ring {
+            width: 72px; height: 72px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 30px; position: relative; flex-shrink: 0;
+            transition: all .4s;
+        }
+        .status-ring.on  { background: rgba(34,197,94,0.15);  box-shadow: 0 0 32px rgba(34,197,94,0.3);  }
+        .status-ring.off { background: rgba(239,68,68,0.15);   box-shadow: 0 0 32px rgba(239,68,68,0.3);  }
+        .hero-info h2 { font-size: 28px; font-weight: 800; letter-spacing: -1px; }
+        .hero-info h2.on  { color: var(--green); }
+        .hero-info h2.off { color: var(--red); }
+        .hero-info p  { font-size: 13px; color: var(--muted); margin-top: 4px; }
+        .hero-right { text-align: right; }
+        .hero-right .sync { font-size: 12px; color: var(--muted); }
+        .hero-right .last-on { font-size: 13px; color: var(--cyan); margin-top: 4px; }
+        .esp-info { margin-top: 12px; display: flex; gap: 14px; justify-content: flex-end; flex-wrap: wrap; }
+        .esp-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+
+        /* ── METRIC GRID ── */
+        .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 20px; }
+
+        .metric {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 18px; padding: 20px 18px;
+            backdrop-filter: blur(12px);
+            transition: transform .2s, box-shadow .2s;
+            position: relative; overflow: hidden;
+        }
+        .metric:hover { transform: translateY(-3px); box-shadow: 0 12px 40px rgba(0,0,0,0.3); }
+        .metric::after {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            border-radius: 18px 18px 0 0;
+        }
+        .metric.blue::after   { background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+        .metric.green::after  { background: linear-gradient(90deg, var(--green), #86efac); }
+        .metric.yellow::after { background: linear-gradient(90deg, var(--yellow), #fde68a); }
+        .metric.orange::after { background: linear-gradient(90deg, var(--orange), #fed7aa); }
+        .metric.cyan::after   { background: linear-gradient(90deg, var(--cyan), #a5f3fc); }
+        .metric.purple::after { background: linear-gradient(90deg, #a855f7, #d8b4fe); }
+
+        .metric-icon { font-size: 22px; margin-bottom: 10px; }
+        .metric-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+        .metric-val   { font-size: 28px; font-weight: 700; letter-spacing: -1px; line-height: 1; }
+        .metric-unit  { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+        .metric.blue   .metric-val { color: var(--cyan); }
+        .metric.green  .metric-val { color: var(--green); }
+        .metric.yellow .metric-val { color: var(--yellow); }
+        .metric.orange .metric-val { color: var(--orange); }
+        .metric.cyan   .metric-val { color: #67e8f9; }
+        .metric.purple .metric-val { color: #d8b4fe; }
+
+        /* ── CHART SECTION ── */
+        .section-title {
+            font-size: 16px; font-weight: 600; color: var(--text);
+            margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+        }
+        .section-title span { color: var(--muted); font-size: 13px; font-weight: 400; }
+
+        .tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+        .tab {
+            padding: 7px 18px; border-radius: 100px;
+            border: 1px solid var(--border);
+            background: transparent; color: var(--muted);
+            cursor: pointer; font-size: 13px; font-family: 'Inter', sans-serif;
+            transition: all .2s;
+        }
+        .tab:hover  { border-color: var(--blue); color: var(--text); }
+        .tab.active { background: var(--blue); color: #fff; border-color: var(--blue); font-weight: 600; }
+
+        .chart-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 20px; padding: 24px;
+            backdrop-filter: blur(12px);
+            margin-bottom: 20px;
+        }
+        canvas { max-height: 240px; }
+
+        /* ── HISTORY ── */
+        .history-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 20px; padding: 24px;
+            backdrop-filter: blur(12px);
+        }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        thead tr { border-bottom: 1px solid var(--border); }
+        th { color: var(--muted); text-align: left; padding: 10px 12px; font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; }
+        td { padding: 12px 12px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+        tbody tr:hover { background: rgba(255,255,255,0.02); }
+        tbody tr:last-child td { border-bottom: none; }
+
+        .badge {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 3px 10px; border-radius: 100px; font-size: 11px; font-weight: 600;
+        }
+        .badge-on  { background: rgba(34,197,94,0.15);  color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
+        .badge-off { background: rgba(239,68,68,0.15);  color: var(--red);   border: 1px solid rgba(239,68,68,0.3); }
+        .badge::before { content: '●'; font-size: 8px; }
+
+        .empty { text-align: center; color: var(--muted); padding: 32px; font-size: 14px; }
+
+        /* ── FOOTER ── */
+        footer { text-align: center; margin-top: 40px; color: var(--muted); font-size: 12px; }
+
+        /* ── RESPONSIVE ── */
+        @media (max-width: 768px) {
+            .wrap { padding: 16px 12px 40px; }
+            header { margin-bottom: 20px; }
+            .logo-text h1 { font-size: 17px; }
+            .live-badge { font-size: 11px; padding: 6px 12px; }
+
+            .hero { padding: 18px; flex-direction: column; align-items: flex-start; gap: 14px; }
+            .hero-right { width: 100%; text-align: left; }
+            .hero-right > div:last-child { justify-content: flex-start; flex-wrap: wrap; gap: 10px; }
+            .hero-info h2 { font-size: 22px; }
+            .status-ring { width: 56px; height: 56px; font-size: 24px; }
+
+            .metrics { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .metric { padding: 14px 12px; }
+            .metric-val { font-size: 22px; }
+            .metric-icon { font-size: 18px; margin-bottom: 6px; }
+
+            .tabs { flex-wrap: wrap; gap: 6px; }
+            .tab { padding: 6px 14px; font-size: 12px; }
+
+            .chart-card { padding: 14px; }
+            canvas { max-height: 200px; }
+
+            .history-card { padding: 14px; }
+            .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            table { min-width: 520px; }
+            th, td { padding: 8px 8px; font-size: 11px; }
+
+            .section-title { font-size: 14px; }
+            footer { font-size: 11px; }
+        }
+
+        @media (max-width: 400px) {
+            .metrics { grid-template-columns: repeat(2, 1fr); }
+            .metric-val { font-size: 18px; }
+            .hero-info h2 { font-size: 18px; }
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+
+    <!-- HEADER -->
+    <header>
+        <div class="logo">
+            <div class="logo-icon">⚡</div>
+            <div class="logo-text">
+                <h1>PowerTrack</h1>
+                <p>Real-time PC Energy Monitor</p>
+            </div>
+        </div>
+        <div class="live-badge">
+            <div class="live-dot"></div>
+            <span id="syncTime">Connecting...</span>
+        </div>
+    </header>
+
+    <!-- STATUS HERO -->
+    <div class="hero">
+        <div class="hero-left">
+            <div class="status-ring off" id="statusRing">💻</div>
+            <div class="hero-info">
+                <h2 class="off" id="pcState">OFFLINE</h2>
+                <p id="statusSub">Waiting for data...</p>
+            </div>
+        </div>
+        <div class="hero-right">
+            <div class="last-on" id="lastOnTime">--</div>
+            <div class="sync" id="lastOffTime">--</div>
+            <div class="esp-info">
+                <div class="esp-item">
+                    <span style="color:#64748b;">📡 ESP32</span>
+                    <span id="espStatus" class="badge" style="background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">OFFLINE</span>
+                </div>
+                <div class="esp-item">
+                    <span style="color:#64748b;">📶</span>
+                    <span id="wifiSsid" style="color:#67e8f9;">--</span>
+                </div>
+                <div class="esp-item">
+                    <span style="color:#64748b;">🌐</span>
+                    <span id="espIp" style="color:#94a3b8;">--</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- METRICS -->
+    <div class="metrics">
+        <div class="metric blue">
+            <div class="metric-icon">⚡</div>
+            <div class="metric-label">Power</div>
+            <div class="metric-val" id="power">--</div>
+            <div class="metric-unit">Watts</div>
+        </div>
+        <div class="metric cyan">
+            <div class="metric-icon">🔌</div>
+            <div class="metric-label">Voltage</div>
+            <div class="metric-val" id="voltage">--</div>
+            <div class="metric-unit">Volts</div>
+        </div>
+        <div class="metric purple">
+            <div class="metric-icon">〰️</div>
+            <div class="metric-label">Current</div>
+            <div class="metric-val" id="current">--</div>
+            <div class="metric-unit">Ampere</div>
+        </div>
+        <div class="metric green">
+            <div class="metric-icon">🔋</div>
+            <div class="metric-label">Today Energy</div>
+            <div class="metric-val" id="todayEnergy">--</div>
+            <div class="metric-unit">kWh</div>
+        </div>
+        <div class="metric yellow">
+            <div class="metric-icon">💰</div>
+            <div class="metric-label">Today Cost</div>
+            <div class="metric-val" id="todayCost">--</div>
+            <div class="metric-unit">BDT ৳</div>
+        </div>
+        <div class="metric orange">
+            <div class="metric-icon">📊</div>
+            <div class="metric-label">Total Cost</div>
+            <div class="metric-val" id="totalCost">--</div>
+            <div class="metric-unit">BDT ৳</div>
+        </div>
+    </div>
+
+    <!-- ENERGY CHART -->
+    <div class="section-title">Energy Analytics <span>kWh consumption per period</span></div>
+    <div class="tabs">
+        <button class="tab active" onclick="switchEnergyTab(this,'daily')">7 Days</button>
+        <button class="tab" onclick="switchEnergyTab(this,'weekly')">4 Weeks</button>
+        <button class="tab" onclick="switchEnergyTab(this,'monthly')">30 Days</button>
+    </div>
+    <div class="chart-card">
+        <canvas id="energyChart"></canvas>
+    </div>
+
+    <!-- USAGE CHART -->
+    <div class="section-title">Usage Analytics <span>PC on-time per period</span></div>
+    <div class="tabs">
+        <button class="tab active" onclick="switchTab(this,'daily')">7 Days</button>
+        <button class="tab" onclick="switchTab(this,'weekly')">4 Weeks</button>
+        <button class="tab" onclick="switchTab(this,'monthly')">30 Days</button>
+    </div>
+    <div class="chart-card">
+        <canvas id="usageChart"></canvas>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="section-title">Event History <span>Last 15 ON/OFF events</span></div>
+    <div class="history-card">
+        <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Event</th>
+                    <th>Description</th>
+                    <th>Duration</th>
+                </tr>
+            </thead>
+            <tbody id="historyBody">
+                <tr><td colspan="5" class="empty">Loading history...</td></tr>
+            </tbody>
+        </table>
+        </div>
+    </div>
+
+    <footer>PowerTrack &nbsp;·&nbsp; ESP32 + PZEM-004T &nbsp;·&nbsp; Firebase RTDB</footer>
+</div>
+
+<script>
+    const DB_URL    = "https://testing-pc-5d796-default-rtdb.asia-southeast1.firebasedatabase.app";
+    const DB_SECRET = "r9B6FUMY9N1b4Nvs8iNuIuOH5qy67kPPHJNaazEM";
+
+    let usageChart  = null;
+    let energyChart = null;
+    let currentUsageTab  = 'daily';
+    let currentEnergyTab = 'daily';
+    let allUsage   = {};
+    let allEnergy  = {};
+
+    function dbFetch(path) {
+        return fetch(`${DB_URL}${path}?auth=${DB_SECRET}`).then(r => r.json());
+    }
+
+    function daysAgo(n) {
+        const d = new Date();
+        d.setDate(d.getDate() - n);
+        return d.toISOString().slice(0, 10);
+    }
+
+    // ── LIVE DATA ──
+    function fetchLive() {
+        dbFetch("/PC_Monitor.json").then(data => {
+            if (!data) return;
+
+            if (data.live) {
+                document.getElementById('voltage').innerText = (data.live.voltage || 0).toFixed(1);
+                document.getElementById('current').innerText = (data.live.current || 0).toFixed(2);
+                document.getElementById('power').innerText   = (data.live.power   || 0).toFixed(1);
+            }
+            if (data.energy) {
+                document.getElementById('todayEnergy').innerText = (data.energy.today      || 0).toFixed(3);
+                document.getElementById('todayCost').innerText   = (data.energy.today_cost || 0).toFixed(2);
+                document.getElementById('totalCost').innerText   = (data.energy.total_cost || 0).toFixed(2);
+            }
+
+            const pcOn = data.status && data.status.pcState === "ON"
+                || (!data.status && data.live && data.live.power > 10);
+
+            const ring    = document.getElementById('statusRing');
+            const stateEl = document.getElementById('pcState');
+            const subEl   = document.getElementById('statusSub');
+
+            if (pcOn) {
+                ring.className    = 'status-ring on';
+                stateEl.textContent = 'MACHINE ON';
+                stateEl.className = 'on';
+                subEl.textContent = 'Machine is running';
+            } else {
+                ring.className    = 'status-ring off';
+                stateEl.textContent = 'MACHINE OFF';
+                stateEl.className = 'off';
+                subEl.textContent = 'Machine is powered off';
+            }
+
+            if (data.status) {
+                if (data.status.lastOn)
+                    document.getElementById('lastOnTime').innerText  = '🟢 Last ON: '  + data.status.lastOn.slice(0,19);
+                if (data.status.lastOff)
+                    document.getElementById('lastOffTime').innerText = '🔴 Last OFF: ' + data.status.lastOff.slice(0,19);
+            }
+
+            if (data.esp32) {
+                const esp = data.esp32;
+                const espEl = document.getElementById('espStatus');
+
+                // Detect offline: if last_seen > 30 seconds ago
+                let isOnline = false;
+                if (esp.last_seen) {
+                    const lastSeen = new Date(esp.last_seen.replace(' ', 'T') + '+06:00');
+                    const diffSec  = (Date.now() - lastSeen.getTime()) / 1000;
+                    isOnline = diffSec < 30;
+                }
+
+                if (isOnline) {
+                    espEl.textContent = 'ONLINE';
+                    espEl.style.background   = 'rgba(34,197,94,0.15)';
+                    espEl.style.color        = '#22c55e';
+                    espEl.style.borderColor  = 'rgba(34,197,94,0.3)';
+                } else {
+                    espEl.textContent = 'OFFLINE';
+                    espEl.style.background   = 'rgba(239,68,68,0.15)';
+                    espEl.style.color        = '#ef4444';
+                    espEl.style.borderColor  = 'rgba(239,68,68,0.3)';
+                }
+                document.getElementById('wifiSsid').innerText = esp.wifi_ssid || '--';
+                document.getElementById('espIp').innerText    = esp.ip        || '--';
+            }
+
+            document.getElementById('syncTime').innerText = 'Live · ' + new Date().toLocaleTimeString();
+        }).catch(() => {
+            document.getElementById('syncTime').innerText = 'Connection error';
+        });
+    }
+
+    // ── CHART ──
+    function buildChart(labels, values, label) {
+        const ctx = document.getElementById('usageChart').getContext('2d');
+        if (usageChart) usageChart.destroy();
+
+        const gradient = ctx.createLinearGradient(0, 0, 0, 240);
+        gradient.addColorStop(0, 'rgba(59,130,246,0.8)');
+        gradient.addColorStop(1, 'rgba(6,182,212,0.3)');
+
+        usageChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{ label, data: values,
+                    backgroundColor: values.map(v => v > 0 ? gradient : 'rgba(255,255,255,0.04)'),
+                    borderRadius: 8, borderSkipped: false }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false },
+                    tooltip: { backgroundColor: '#1e293b', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
+                        titleColor: '#94a3b8', bodyColor: '#f1f5f9',
+                        callbacks: { label: c => ` ${c.parsed.y.toFixed(0)} min  (${(c.parsed.y/60).toFixed(1)} hrs)` }
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: '#64748b', font: { size: 11 }, maxRotation: 45 }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                    y: { ticks: { color: '#64748b', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    function buildEnergyChart(labels, values) {
+        const ctx = document.getElementById('energyChart').getContext('2d');
+        if (energyChart) energyChart.destroy();
+
+        const gradient = ctx.createLinearGradient(0, 0, 0, 240);
+        gradient.addColorStop(0, 'rgba(34,197,94,0.8)');
+        gradient.addColorStop(1, 'rgba(250,204,21,0.2)');
+
+        energyChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{ label: 'Energy (kWh)', data: values,
+                    backgroundColor: values.map(v => v > 0 ? gradient : 'rgba(255,255,255,0.04)'),
+                    borderRadius: 8, borderSkipped: false }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false },
+                    tooltip: { backgroundColor: '#1e293b', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
+                        titleColor: '#94a3b8', bodyColor: '#f1f5f9',
+                        callbacks: { label: c => ` ${c.parsed.y.toFixed(4)} kWh  (৳${(c.parsed.y * 14).toFixed(2)})` }
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: '#64748b', font: { size: 11 }, maxRotation: 45 }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                    y: { ticks: { color: '#64748b', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    function switchTab(el, tab) {
+        currentUsageTab = tab;
+        document.querySelectorAll('.tabs:nth-of-type(2) .tab').forEach(t => t.classList.remove('active'));
+        el.classList.add('active');
+        renderUsageChart();
+    }
+
+    function switchEnergyTab(el, tab) {
+        currentEnergyTab = tab;
+        document.querySelectorAll('.tabs:nth-of-type(1) .tab').forEach(t => t.classList.remove('active'));
+        el.classList.add('active');
+        renderEnergyChart();
+    }
+
+    function renderEnergyChart() {
+        if (currentEnergyTab === 'daily') {
+            const dates  = Array.from({length: 7},  (_, i) => daysAgo(6 - i));
+            const labels = dates.map(d => d.slice(5));
+            const values = dates.map(d => allEnergy[d] ? (allEnergy[d].kwh || 0) : 0);
+            buildEnergyChart(labels, values);
+        } else if (currentEnergyTab === 'weekly') {
+            const weeks = Array.from({length: 4}, (_, w) => {
+                const start = daysAgo((3 - w) * 7 + 6);
+                const end   = daysAgo((3 - w) * 7);
+                let total   = 0;
+                for (let d = 0; d <= 6; d++) {
+                    const dk = daysAgo((3 - w) * 7 + (6 - d));
+                    if (allEnergy[dk]) total += allEnergy[dk].kwh || 0;
+                }
+                return { label: `${start.slice(5)}~${end.slice(5)}`, total };
+            });
+            buildEnergyChart(weeks.map(w => w.label), weeks.map(w => w.total));
+        } else {
+            const dates  = Array.from({length: 30}, (_, i) => daysAgo(29 - i));
+            const labels = dates.map(d => d.slice(5));
+            const values = dates.map(d => allEnergy[d] ? (allEnergy[d].kwh || 0) : 0);
+            buildEnergyChart(labels, values);
+        }
+    }
+
+    function renderUsageChart() {
+        if (currentUsageTab === 'daily') {
+            const dates  = Array.from({length: 7},  (_, i) => daysAgo(6 - i));
+            const labels = dates.map(d => d.slice(5));
+            const values = dates.map(d => allUsage[d] ? (allUsage[d].minutes || 0) : 0);
+            buildChart(labels, values, 'Usage (min)');
+
+        } else if (currentUsageTab === 'weekly') {
+            const weeks = Array.from({length: 4}, (_, w) => {
+                const start = daysAgo((3 - w) * 7 + 6);
+                const end   = daysAgo((3 - w) * 7);
+                let total   = 0;
+                for (let d = 0; d <= 6; d++) {
+                    const dk = daysAgo((3 - w) * 7 + (6 - d));
+                    if (allUsage[dk]) total += allUsage[dk].minutes || 0;
+                }
+                return { label: `${start.slice(5)}~${end.slice(5)}`, total };
+            });
+            buildChart(weeks.map(w => w.label), weeks.map(w => w.total), 'Usage (min)');
+        } else {
+            const dates  = Array.from({length: 30}, (_, i) => daysAgo(29 - i));
+            const labels = dates.map(d => d.slice(5));
+            const values = dates.map(d => allUsage[d] ? (allUsage[d].minutes || 0) : 0);
+            buildChart(labels, values, 'Usage (min)');
+        }
+    }
+
+    function fetchUsage() {
+        dbFetch("/PC_Monitor/usage.json").then(data => {
+            allUsage = data || {};
+            renderUsageChart();
+        });
+    }
+
+    function fetchEnergy() {
+        dbFetch("/PC_Monitor/energy_history.json").then(data => {
+            allEnergy = data || {};
+            renderEnergyChart();
+        });
+    }
+
+    // ── HISTORY ──
+    function fetchHistory() {
+        dbFetch("/PC_Monitor/events.json").then(data => {
+            const tbody = document.getElementById('historyBody');
+            if (!data) {
+                tbody.innerHTML = '<tr><td colspan="4" class="empty">No events yet</td></tr>';
+                return;
+            }
+
+            const rows = [];
+            Object.keys(data).sort().reverse().forEach(date => {
+                Object.values(data[date]).forEach(ev => rows.push({ date, ...ev }));
+            });
+            rows.sort((a, b) => b.time.localeCompare(a.time));
+
+            tbody.innerHTML = rows.slice(0, 15).map(ev => {
+                const typeColor = ev.type === 'esp32' ? '#a855f7' : (ev.state === 'ON' ? '#22c55e' : '#ef4444');
+                const typeBg    = ev.type === 'esp32' ? 'rgba(168,85,247,0.15)' : (ev.state === 'ON' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)');
+                const typeBorder= ev.type === 'esp32' ? 'rgba(168,85,247,0.3)'  : (ev.state === 'ON' ? 'rgba(34,197,94,0.3)'  : 'rgba(239,68,68,0.3)');
+                const label     = ev.type === 'esp32' ? 'ESP32' : ev.state;
+                return `
+                <tr>
+                    <td style="color:#94a3b8">${ev.date}</td>
+                    <td style="font-weight:500">${ev.time ? ev.time.slice(11,19) : '--'}</td>
+                    <td><span class="badge" style="background:${typeBg};color:${typeColor};border:1px solid ${typeBorder}">${label}</span></td>
+                    <td style="color:#cbd5e1;font-size:12px">${ev.desc || '--'}</td>
+                    <td style="color:#64748b">${ev.duration_min ? ev.duration_min.toFixed(1) + ' min' : '—'}</td>
+                </tr>`;
+            }).join('');
+        });
+    }
+
+    // ── INIT ──
+    fetchLive();
+    fetchUsage();
+    fetchEnergy();
+    fetchHistory();
+    setInterval(fetchLive,    5000);
+    setInterval(fetchUsage,   30000);
+    setInterval(fetchEnergy,  30000);
+    setInterval(fetchHistory, 30000);
+</script>
+</body>
+</html>
