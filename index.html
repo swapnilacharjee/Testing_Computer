@@ -411,23 +411,47 @@
                 document.getElementById('totalCost').innerText   = (data.energy.total_cost || 0).toFixed(2);
             }
 
-            const pcOn = data.status && data.status.pcState === "ON"
-                || (!data.status && data.live && data.live.power > 10);
+            // ESP32 online check first
+            let isOnline = false;
+            const espEl = document.getElementById('espStatus');
+            if (data.esp32) {
+                const esp = data.esp32;
+                if (esp.last_seen_unix) {
+                    isOnline = (Date.now() / 1000 - esp.last_seen_unix) < 15;
+                } else if (esp.last_seen) {
+                    const lastSeen = new Date(esp.last_seen.replace(' ', 'T'));
+                    isOnline = Math.abs((Date.now() - lastSeen.getTime()) / 1000) < 15;
+                }
+                if (isOnline) {
+                    espEl.textContent       = 'ONLINE';
+                    espEl.style.background  = 'rgba(34,197,94,0.15)';
+                    espEl.style.color       = '#22c55e';
+                    espEl.style.borderColor = 'rgba(34,197,94,0.3)';
+                } else {
+                    espEl.textContent       = 'OFFLINE';
+                    espEl.style.background  = 'rgba(239,68,68,0.15)';
+                    espEl.style.color       = '#ef4444';
+                    espEl.style.borderColor = 'rgba(239,68,68,0.3)';
+                }
+                document.getElementById('wifiSsid').innerText = esp.wifi_ssid || '--';
+                document.getElementById('espIp').innerText    = esp.ip        || '--';
+            }
 
+            // Machine status: ON only if ESP is online AND pcState is ON
+            const pcOn = isOnline && data.status && data.status.pcState === 'ON';
             const ring    = document.getElementById('statusRing');
             const stateEl = document.getElementById('pcState');
             const subEl   = document.getElementById('statusSub');
-
             if (pcOn) {
-                ring.className    = 'status-ring on';
+                ring.className      = 'status-ring on';
                 stateEl.textContent = 'MACHINE ON';
-                stateEl.className = 'on';
-                subEl.textContent = 'Machine is running';
+                stateEl.className   = 'on';
+                subEl.textContent   = 'Machine is running';
             } else {
-                ring.className    = 'status-ring off';
+                ring.className      = 'status-ring off';
                 stateEl.textContent = 'MACHINE OFF';
-                stateEl.className = 'off';
-                subEl.textContent = 'Machine is powered off';
+                stateEl.className   = 'off';
+                subEl.textContent   = isOnline ? 'Machine is powered off' : 'ESP32 is offline';
             }
 
             if (data.status) {
@@ -435,36 +459,6 @@
                     document.getElementById('lastOnTime').innerText  = '🟢 Last ON: '  + data.status.lastOn.slice(0,19);
                 if (data.status.lastOff)
                     document.getElementById('lastOffTime').innerText = '🔴 Last OFF: ' + data.status.lastOff.slice(0,19);
-            }
-
-            if (data.esp32) {
-                const esp = data.esp32;
-                const espEl = document.getElementById('espStatus');
-
-                // Detect offline: if last_seen_unix > 30 seconds ago
-                let isOnline = false;
-                if (esp.last_seen_unix) {
-                    const diffSec = (Date.now() / 1000) - esp.last_seen_unix;
-                    isOnline = diffSec < 15;
-                } else if (esp.last_seen) {
-                    const lastSeen = new Date(esp.last_seen.replace(' ', 'T'));
-                    const diffSec  = (Date.now() - lastSeen.getTime()) / 1000;
-                    isOnline = Math.abs(diffSec) < 15;
-                }
-
-                if (isOnline) {
-                    espEl.textContent = 'ONLINE';
-                    espEl.style.background   = 'rgba(34,197,94,0.15)';
-                    espEl.style.color        = '#22c55e';
-                    espEl.style.borderColor  = 'rgba(34,197,94,0.3)';
-                } else {
-                    espEl.textContent = 'OFFLINE';
-                    espEl.style.background   = 'rgba(239,68,68,0.15)';
-                    espEl.style.color        = '#ef4444';
-                    espEl.style.borderColor  = 'rgba(239,68,68,0.3)';
-                }
-                document.getElementById('wifiSsid').innerText = esp.wifi_ssid || '--';
-                document.getElementById('espIp').innerText    = esp.ip        || '--';
             }
 
             document.getElementById('syncTime').innerText = 'Live · ' + new Date().toLocaleTimeString();
