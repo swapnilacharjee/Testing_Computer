@@ -166,8 +166,11 @@
 <script>
     const DB_URL = "https://testing-pc-5d796-default-rtdb.asia-southeast1.firebasedatabase.app";
     const DB_SECRET = "r9B6FUMY9N1b4Nvs8iNuIuOH5qy67kPPHJNaazEM";
-    let usageChart = null, energyChart = null, currentUsageTab = 'daily', currentEnergyTab = 'daily';
+    let usageChart = null, energyChart = null;
+    let currentUsageTab = 'daily', currentEnergyTab = 'daily';
     let allUsage = {}, allEnergy = {};
+    let lastKnownOnTime = null;
+    let wasOnline = false;
 
     function dbFetch(path) { return fetch(`${DB_URL}${path}?auth=${DB_SECRET}`).then(r => r.json()); }
     function daysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
@@ -176,14 +179,14 @@
         dbFetch("/PC_Monitor.json").then(data => {
             if (!data) return;
 
-            // 1. Check ESP online status FIRST
+            // 1. ESP online check FIRST
             let isOnline = false;
             if (data.esp32) {
                 const esp = data.esp32;
                 if (esp.last_seen_unix) {
-                    isOnline = (Date.now() / 1000 - esp.last_seen_unix) < 300;
+                    isOnline = (Date.now() / 1000 - esp.last_seen_unix) < 30;
                 } else if (esp.last_seen) {
-                    isOnline = Math.abs((Date.now() - new Date(esp.last_seen.replace(' ','T')).getTime()) / 1000) < 300;
+                    isOnline = Math.abs((Date.now() - new Date(esp.last_seen.replace(' ','T')).getTime()) / 1000) < 30;
                 }
                 const espEl = document.getElementById('espStatus');
                 if (isOnline) {
@@ -214,21 +217,29 @@
                 document.getElementById('todayCost').innerText   = isOnline ? (data.energy.today_cost || 0).toFixed(2) : '0.00';
             }
 
-            // 4. Machine status
+            // 4. Machine status — OFF if ESP offline
             const pcOn = isOnline && data.status && data.status.pcState === 'ON';
             const ring = document.getElementById('statusRing');
             const stateEl = document.getElementById('pcState');
             const subEl = document.getElementById('statusSub');
+
             if (pcOn) {
                 ring.className = 'status-ring on';
                 stateEl.textContent = 'MACHINE ON';
                 stateEl.className = 'on';
                 subEl.textContent = 'Machine is running';
+                if (data.status.lastOn) lastKnownOnTime = new Date(data.status.lastOn.replace(' ', 'T'));
             } else {
                 ring.className = 'status-ring off';
                 stateEl.textContent = 'MACHINE OFF';
                 stateEl.className = 'off';
-                subEl.textContent = isOnline ? 'Machine is powered off' : 'ESP32 is offline';
+                if (!isOnline && lastKnownOnTime && data.status && data.status.pcState === 'ON') {
+                    const mins = Math.round((Date.now() - lastKnownOnTime.getTime()) / 60000);
+                    subEl.textContent = `ESP32 offline · Machine ran ${mins} min`;
+                } else {
+                    subEl.textContent = isOnline ? 'Machine is powered off' : 'ESP32 is offline';
+                    if (isOnline) lastKnownOnTime = null;
+                }
             }
 
             if (data.status) {
