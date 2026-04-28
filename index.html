@@ -408,7 +408,6 @@
             if (data.energy) {
                 document.getElementById('todayEnergy').innerText = (data.energy.today      || 0).toFixed(3);
                 document.getElementById('todayCost').innerText   = (data.energy.today_cost || 0).toFixed(2);
-                document.getElementById('totalCost').innerText   = (data.energy.total_cost || 0).toFixed(2);
             }
 
             // ESP32 online check first
@@ -609,6 +608,10 @@
     function fetchEnergy() {
         dbFetch("/PC_Monitor/energy_history.json").then(data => {
             allEnergy = data || {};
+            // Calculate total cost from all days
+            let totalKwh = 0;
+            Object.values(allEnergy).forEach(d => { totalKwh += d.kwh || 0; });
+            document.getElementById('totalCost').innerText = (totalKwh * 14).toFixed(2);
             renderEnergyChart();
         });
     }
