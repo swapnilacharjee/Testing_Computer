@@ -179,7 +179,7 @@
         const timeStr = now.toISOString().replace('T',' ').slice(0,19);
         const ev = JSON.stringify({
             state: 'OFF', time: timeStr, type: 'machine',
-            desc: 'Machine OFF (ESP32 went offline)',
+            desc: `Machine OFF (ESP32 offline) · Ran ${mins} min`,
             duration_min: parseFloat(mins)
         });
         fetch(`${DB_URL}/PC_Monitor/events/${dateKey}.json?auth=${DB_SECRET}`, {
@@ -191,7 +191,16 @@
         fetch(`${DB_URL}/PC_Monitor/status/lastOff.json?auth=${DB_SECRET}`, {
             method: 'PUT', body: `"${timeStr}"`, headers: {'Content-Type':'application/json'}
         });
-        console.log(`ESP offline event written: ${mins} min`);
+        // Add usage minutes
+        const usageDateKey = now.toISOString().slice(0,10).replace(/-/g,'-');
+        fetch(`${DB_URL}/PC_Monitor/usage/${usageDateKey}/minutes.json?auth=${DB_SECRET}`)
+            .then(r => r.json())
+            .then(existing => {
+                const total = ((existing || 0) + parseFloat(mins)).toFixed(1);
+                fetch(`${DB_URL}/PC_Monitor/usage/${usageDateKey}/minutes.json?auth=${DB_SECRET}`, {
+                    method: 'PUT', body: total, headers: {'Content-Type':'application/json'}
+                });
+            });
     }
 
     function dbFetch(path) { return fetch(`${DB_URL}${path}?auth=${DB_SECRET}`).then(r => r.json()); }
