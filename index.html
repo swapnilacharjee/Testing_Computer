@@ -205,8 +205,8 @@
                 document.getElementById('power').innerText   = (data.live.power   || 0).toFixed(1);
             }
             if (data.energy) {
-                document.getElementById('todayEnergy').innerText = (data.energy.today || 0).toFixed(3);
-                document.getElementById('todayCost').innerText   = (data.energy.today_cost || 0).toFixed(2);
+                document.getElementById('todayEnergy').innerText = isOnline ? (data.energy.today || 0).toFixed(3) : '0.000';
+                document.getElementById('todayCost').innerText   = isOnline ? (data.energy.today_cost || 0).toFixed(2) : '0.00';
             }
 
             let isOnline = false;
