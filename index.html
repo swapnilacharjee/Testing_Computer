@@ -212,8 +212,8 @@
             let isOnline = false;
             if (data.esp32) {
                 const esp = data.esp32;
-                if (esp.last_seen_unix) isOnline = (Date.now() / 1000 - esp.last_seen_unix) < 15;
-                else if (esp.last_seen) isOnline = Math.abs((Date.now() - new Date(esp.last_seen.replace(' ','T')).getTime()) / 1000) < 15;
+                if (esp.last_seen_unix) isOnline = (Date.now() / 1000 - esp.last_seen_unix) < 300;
+                else if (esp.last_seen) isOnline = Math.abs((Date.now() - new Date(esp.last_seen.replace(' ','T')).getTime()) / 1000) < 300;
 
                 const espEl = document.getElementById('espStatus');
                 if (isOnline) {
