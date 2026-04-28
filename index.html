@@ -170,7 +170,29 @@
     let currentUsageTab = 'daily', currentEnergyTab = 'daily';
     let allUsage = {}, allEnergy = {};
     let lastKnownOnTime = null;
-    let wasOnline = false;
+    let espOfflineHandled = false;
+
+    function writeOfflineEvent(lastOnTime) {
+        const now = new Date();
+        const mins = ((now - lastOnTime) / 60000).toFixed(1);
+        const dateKey = now.toISOString().slice(0,10);
+        const timeStr = now.toISOString().replace('T',' ').slice(0,19);
+        const ev = JSON.stringify({
+            state: 'OFF', time: timeStr, type: 'machine',
+            desc: 'Machine OFF (ESP32 went offline)',
+            duration_min: parseFloat(mins)
+        });
+        fetch(`${DB_URL}/PC_Monitor/events/${dateKey}.json?auth=${DB_SECRET}`, {
+            method: 'POST', body: ev, headers: {'Content-Type':'application/json'}
+        });
+        fetch(`${DB_URL}/PC_Monitor/status/pcState.json?auth=${DB_SECRET}`, {
+            method: 'PUT', body: '"OFF"', headers: {'Content-Type':'application/json'}
+        });
+        fetch(`${DB_URL}/PC_Monitor/status/lastOff.json?auth=${DB_SECRET}`, {
+            method: 'PUT', body: `"${timeStr}"`, headers: {'Content-Type':'application/json'}
+        });
+        console.log(`ESP offline event written: ${mins} min`);
+    }
 
     function dbFetch(path) { return fetch(`${DB_URL}${path}?auth=${DB_SECRET}`).then(r => r.json()); }
     function daysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
@@ -229,16 +251,23 @@
                 stateEl.className = 'on';
                 subEl.textContent = 'Machine is running';
                 if (data.status.lastOn) lastKnownOnTime = new Date(data.status.lastOn.replace(' ', 'T'));
+                espOfflineHandled = false;
             } else {
                 ring.className = 'status-ring off';
                 stateEl.textContent = 'MACHINE OFF';
                 stateEl.className = 'off';
-                if (!isOnline && lastKnownOnTime && data.status && data.status.pcState === 'ON') {
-                    const mins = Math.round((Date.now() - lastKnownOnTime.getTime()) / 60000);
-                    subEl.textContent = `ESP32 offline · Machine ran ${mins} min`;
+                // ESP went offline while machine was ON
+                if (!isOnline && lastKnownOnTime && data.status && data.status.pcState === 'ON' && !espOfflineHandled) {
+                    espOfflineHandled = true;
+                    writeOfflineEvent(lastKnownOnTime);
+                    const mins = ((Date.now() - lastKnownOnTime.getTime()) / 60000).toFixed(1);
+                    subEl.textContent = `ESP32 offline · Ran ${mins} min`;
+                } else if (!isOnline && lastKnownOnTime && data.status && data.status.pcState === 'ON') {
+                    const mins = ((Date.now() - lastKnownOnTime.getTime()) / 60000).toFixed(1);
+                    subEl.textContent = `ESP32 offline · Ran ${mins} min`;
                 } else {
                     subEl.textContent = isOnline ? 'Machine is powered off' : 'ESP32 is offline';
-                    if (isOnline) lastKnownOnTime = null;
+                    if (isOnline) { lastKnownOnTime = null; espOfflineHandled = false; }
                 }
             }
 
