@@ -326,6 +326,12 @@
             <div class="metric-val" id="totalCost">--</div>
             <div class="metric-unit">BDT ৳</div>
         </div>
+        <div class="metric cyan">
+            <div class="metric-icon">⚡</div>
+            <div class="metric-label">Total Energy</div>
+            <div class="metric-val" id="totalEnergy">--</div>
+            <div class="metric-unit">kWh</div>
+        </div>
     </div>
 
     <!-- ENERGY CHART -->
@@ -611,7 +617,8 @@
             // Calculate total cost from all days
             let totalKwh = 0;
             Object.values(allEnergy).forEach(d => { totalKwh += d.kwh || 0; });
-            document.getElementById('totalCost').innerText = (totalKwh * 14).toFixed(2);
+            document.getElementById('totalCost').innerText   = (totalKwh * 14).toFixed(2);
+            document.getElementById('totalEnergy').innerText = totalKwh.toFixed(3);
             renderEnergyChart();
         });
     }
