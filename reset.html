@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reset Tool</title>
+    <style>
+        body { font-family: sans-serif; background: #0f172a; color: #f1f5f9; display: flex; flex-direction: column; align-items: center; padding: 40px 20px; gap: 12px; }
+        h2 { color: #ef4444; }
+        button { padding: 12px 28px; border-radius: 10px; border: none; font-size: 15px; cursor: pointer; font-weight: 600; width: 100%; max-width: 320px; }
+        .red { background: #ef4444; color: white; }
+        .yellow { background: #facc15; color: #0f172a; }
+        #log { background: #1e293b; padding: 16px; border-radius: 10px; width: 100%; max-width: 320px; font-size: 13px; color: #94a3b8; min-height: 60px; }
+    </style>
+</head>
+<body>
+    <h2>⚠️ Firebase Reset Tool</h2>
+    <button class="yellow" onclick="del('energy')">Delete Energy Node</button>
+    <button class="yellow" onclick="del('energy_history')">Delete Energy History</button>
+    <button class="red" onclick="del('')">Delete ALL Data</button>
+    <div id="log">Ready...</div>
+<script>
+    const B = "https://testing-pc-5d796-default-rtdb.asia-southeast1.firebasedatabase.app";
+    const K = "r9B6FUMY9N1b4Nvs8iNuIuOH5qy67kPPHJNaazEM";
+    const log = document.getElementById('log');
+    function del(node) {
+        const path = node ? `/PC_Monitor/${node}` : '/PC_Monitor';
+        log.innerText = 'Deleting...';
+        fetch(`${B}${path}.json?auth=${K}`, {method:'DELETE'})
+        .then(r => r.json())
+        .then(d => { log.innerText = '✅ Done! ESP32 restart করুন।'; log.style.color='#22c55e'; })
+        .catch(e => { log.innerText = '❌ Error: ' + e; log.style.color='#ef4444'; });
+    }
+</script>
+</body>
+</html>
