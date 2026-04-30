@@ -171,6 +171,7 @@
     let allUsage = {}, allEnergy = {};
     let lastKnownOnTime = null;
     let espOfflineHandled = false;
+    const SYNTH_OFFLINE_KEY = 'powertrack_synthetic_offline';
 
     function writeOfflineEvent(lastOnTime) {
         const now = new Date();
@@ -382,21 +383,76 @@
     }
 
     function fetchHistory() {
-        dbFetch("/PC_Monitor/events.json").then(data => {
+        Promise.all([dbFetch('/PC_Monitor/events.json'), dbFetch('/PC_Monitor/esp32.json')]).then(([data, esp]) => {
             const tbody = document.getElementById('historyBody');
-            if (!data) { tbody.innerHTML = '<tr><td colspan="5" class="empty">No events yet</td></tr>'; return; }
             const rows = [];
-            Object.keys(data).sort().reverse().forEach(date => { Object.values(data[date]).forEach(ev => rows.push({ date, ...ev })); });
-            rows.sort((a, b) => b.time.localeCompare(a.time));
+
+            if (data) {
+                Object.keys(data).sort().reverse().forEach(date => {
+                    Object.values(data[date]).forEach(ev => rows.push({ date, ...ev }));
+                });
+            }
+
+            const nowUnix = Math.floor(Date.now() / 1000);
+            const lastSeenUnix = esp && esp.last_seen_unix ? Number(esp.last_seen_unix) : 0;
+            const isEspOffline = lastSeenUnix > 0 && (nowUnix - lastSeenUnix) >= 15;
+
+            let syntheticOffline = null;
+            if (lastSeenUnix > 0) {
+                const d = new Date(lastSeenUnix * 1000);
+                const pad = n => String(n).padStart(2, '0');
+                const ts = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+                syntheticOffline = {
+                    state: 'OFFLINE',
+                    type: 'esp32',
+                    date: ts.slice(0, 10),
+                    time: ts,
+                    desc: 'ESP32 Offline - No Firebase updates',
+                    synthetic: true
+                };
+            }
+
+            const hasRealOffline = rows.some(ev => ev.type === 'esp32' && ev.state === 'OFFLINE');
+            const savedSynthetic = localStorage.getItem(SYNTH_OFFLINE_KEY);
+
+            if (isEspOffline && syntheticOffline && !hasRealOffline) {
+                localStorage.setItem(SYNTH_OFFLINE_KEY, JSON.stringify(syntheticOffline));
+            }
+
+            if (hasRealOffline) {
+                localStorage.removeItem(SYNTH_OFFLINE_KEY);
+            }
+
+            if (!hasRealOffline && savedSynthetic) {
+                try {
+                    rows.push(JSON.parse(savedSynthetic));
+                } catch (_) {
+                    localStorage.removeItem(SYNTH_OFFLINE_KEY);
+                }
+            }
+
+            rows.sort((a, b) => (b.time || '').localeCompare(a.time || ''));
+
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty">No events yet</td></tr>';
+                return;
+            }
+
             tbody.innerHTML = rows.slice(0, 15).map(ev => {
-                const isEsp = ev.type === 'esp32', isOn = ev.state === 'ON';
-                const color  = isEsp ? '#a855f7' : (isOn ? '#22c55e' : '#ef4444');
-                const bg     = isEsp ? 'rgba(168,85,247,0.15)' : (isOn ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)');
-                const border = isEsp ? 'rgba(168,85,247,0.3)'  : (isOn ? 'rgba(34,197,94,0.3)'  : 'rgba(239,68,68,0.3)');
+                const isEsp = ev.type === 'esp32';
+                const isEspOfflineEv = isEsp && ev.state === 'OFFLINE';
+                const isEspOnlineEv = isEsp && ev.state === 'ONLINE';
+                const isMachineOn = !isEsp && ev.state === 'ON';
+
+                const color = isEspOfflineEv ? '#ef4444' : (isEspOnlineEv ? '#22c55e' : (isEsp ? '#a855f7' : (isMachineOn ? '#22c55e' : '#ef4444')));
+                const bg = isEspOfflineEv ? 'rgba(239,68,68,0.15)' : (isEspOnlineEv ? 'rgba(34,197,94,0.15)' : (isEsp ? 'rgba(168,85,247,0.15)' : (isMachineOn ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)')));
+                const border = isEspOfflineEv ? 'rgba(239,68,68,0.3)' : (isEspOnlineEv ? 'rgba(34,197,94,0.3)' : (isEsp ? 'rgba(168,85,247,0.3)' : (isMachineOn ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)')));
+                const badgeText = isEsp ? (ev.state || 'ESP32') : (ev.state || '--');
+
                 return `<tr>
-                    <td style="color:#94a3b8">${ev.date}</td>
+                    <td style="color:#94a3b8">${ev.date || '--'}</td>
                     <td style="font-weight:500">${ev.time ? ev.time.slice(11,19) : '--'}</td>
-                    <td><span class="badge" style="background:${bg};color:${color};border:1px solid ${border}">${isEsp ? 'ESP32' : ev.state}</span></td>
+                    <td><span class="badge" style="background:${bg};color:${color};border:1px solid ${border}">${badgeText}</span></td>
                     <td style="color:#cbd5e1;font-size:11px">${ev.desc || '--'}</td>
                     <td style="color:#64748b">${ev.duration_min ? ev.duration_min.toFixed(1) + ' min' : '—'}</td>
                 </tr>`;
