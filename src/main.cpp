@@ -249,13 +249,18 @@ void loop() {
   if (lastDay == -1) lastDay = today;
   if (today != lastDay) {
     lastDay = today;
-    todayEnergy = 0;
+    todayEnergy   = 0;
     todayUsageMin = 0;
     todayProduction = 0;
-    lastEnergy = energy;
+    lastEnergy    = energy;
+    warmupDone    = false;
+    cuttingActive = false;
     pzem.resetEnergy();
-    Database.set<number_t>(aClient, "/PC_Monitor/energy/today",      number_t(0, 4), asyncCB, "midResetE");
-    Database.set<number_t>(aClient, "/PC_Monitor/energy/today_cost", number_t(0, 2), asyncCB, "midResetC");
+    String newDateKey = getDateKey();
+    Database.set<number_t>(aClient, "/PC_Monitor/energy/today",                          number_t(0, 4), asyncCB, "midResetE");
+    Database.set<number_t>(aClient, "/PC_Monitor/energy/today_cost",                     number_t(0, 2), asyncCB, "midResetC");
+    Database.set<number_t>(aClient, "/PC_Monitor/production/" + newDateKey + "/count",   number_t(0, 0), asyncCB, "midResetP");
+    Database.set<number_t>(aClient, "/PC_Monitor/usage/"      + newDateKey + "/minutes", number_t(0, 1), asyncCB, "midResetU");
     Serial.println("Midnight reset!");
   }
 
