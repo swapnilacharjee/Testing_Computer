@@ -371,10 +371,13 @@ void loop() {
     long  unixNow   = time(nullptr);
     String dateKey  = getDateKey();
 
+    float runningMin = (pcState && pcOnSinceUnix > 0) ? (time(nullptr) - pcOnSinceUnix) / 60.0 : 0;
+    float totalUsageMin = todayUsageMin + runningMin;
     String json = "{";
     json += "\"live\":{\"voltage\":" + String(voltage, 2) + ",\"current\":" + String(current, 2) + ",\"power\":" + String(power, 2) + "},";
     json += "\"energy\":{\"today\":" + String(todayEnergy, 4) + ",\"today_cost\":" + String(todayCost, 2) + ",\"total\":" + String(totalEnergy, 4) + ",\"total_cost\":" + String(totalCost, 2) + "},";
     json += "\"production\":{\"todaycuts\":" + String(todayProduction) + ",\"totalcuts\":" + String(totalProduction) + "},";
+    json += "\"usage\":{\"" + dateKey + "\":{\"minutes\":" + String(totalUsageMin, 1) + "}},";
     json += "\"esp32\":{\"last_seen_unix\":" + String(unixNow) + ",\"last_seen\":\"" + getTimestamp() + "\",\"wifi_ssid\":\"" + WiFi.SSID() + "\",\"ip\":\"" + WiFi.localIP().toString() + "\"}";
     json += "}";
     Database.update(aClient, "/PC_Monitor", object_t(json.c_str()), asyncCB, "updateTask");
