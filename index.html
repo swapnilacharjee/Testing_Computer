@@ -218,7 +218,11 @@
         return d.toISOString().slice(0, 10);
     }
     function dbFetch(path) { return fetch(`${DB_URL}${path}?auth=${DB_SECRET}`).then(r => r.json()); }
-    function daysAgo(n) { const d = new Date(Date.now() + 6*3600*1000); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
+    function daysAgo(n) {
+        const d = new Date(Date.now() + 6*3600*1000);
+        d.setUTCDate(d.getUTCDate() - n);
+        return d.toISOString().slice(0, 10);
+    }
 
     function fetchLive() {
         dbFetch("/PC_Monitor.json").then(data => {
@@ -498,7 +502,7 @@
     }
 
     fetchLive(); fetchProduction(); fetchUsage(); fetchEnergy(); fetchHistory();
-    setInterval(fetchLive, 2000); setInterval(fetchProduction, 5000); setInterval(fetchUsage, 30000); setInterval(fetchEnergy, 30000); setInterval(fetchHistory, 30000);
+    setInterval(fetchLive, 5000); setInterval(fetchProduction, 10000); setInterval(fetchUsage, 10000); setInterval(fetchEnergy, 10000); setInterval(fetchHistory, 10000);
 </script>
 </body>
 </html>
