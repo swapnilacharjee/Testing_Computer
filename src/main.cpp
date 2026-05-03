@@ -131,15 +131,13 @@ void setup() {
   while (!app.ready() && millis() - waitStart < 10000) { app.loop(); delay(50); }
   Serial.println("Firebase Ready!");
 
-  // Reset PZEM
-  pzem.resetEnergy();
+  // Do NOT reset PZEM energy on reboot — restore from Firebase instead
   delay(2000);
   float initE = pzem.energy();
-  lastEnergy  = isnan(initE) ? 0 : initE;
-  todayEnergy = 0;
+  lastEnergy  = (!isnan(initE) && initE > 0) ? initE : 0;
   pzemReady     = false;
   pzemReadyTime = millis();
-  Serial.println("PZEM Reset! E=" + String(lastEnergy, 4));
+  Serial.println("PZEM init E=" + String(lastEnergy, 4));
 
   // Restore today production
   Database.get(aClient, "/PC_Monitor/production/todaycuts", gResult);
@@ -236,7 +234,7 @@ void loop() {
     if (millis() - pzemReadyTime >= PZEM_SETTLE_MS) {
       pzemReady  = true;
       float e    = pzem.energy();
-      lastEnergy = (!isnan(e) && e > 0) ? e : 0;
+      if (!isnan(e) && e > 0) lastEnergy = e;
       Serial.println("PZEM settled. lastEnergy=" + String(lastEnergy, 4));
     }
   } else if (!isnan(energy) && energy > 0) {
