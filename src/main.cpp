@@ -71,7 +71,8 @@ int lastDay = -1;
 AsyncResult gResult;
 
 // ---------------- PRODUCTION ----------------
-#define PRODUCTION_WATT_THRESHOLD 20.0f
+#define CUT_AMP_TRIGGER  0.22f   // rising above this = cut started
+#define CUT_AMP_RESET    0.18f   // falling below this = ready for next cut
 #define MACHINE_WARMUP_MS 15000UL
 
 unsigned long machineOnTime   = 0;   // millis() when machine turned ON
@@ -348,15 +349,16 @@ void loop() {
     }
 
     if (warmupDone) {
-      bool inCutZone = (power > PRODUCTION_WATT_THRESHOLD);
+      bool inCutZone = (current >= CUT_AMP_TRIGGER);
+      bool resetZone  = (current < CUT_AMP_RESET);
 
       if (!cuttingActive && inCutZone) {
         cuttingActive = true;
         todayProduction++;
         totalProduction++;
         prodDirty = true;
-        Serial.printf("CUT! Today:%ld  Total:%ld\n", todayProduction, totalProduction);
-      } else if (cuttingActive && !inCutZone) {
+        Serial.printf("CUT! Today:%ld  Total:%ld  I:%.2fA\n", todayProduction, totalProduction, current);
+      } else if (cuttingActive && resetZone) {
         cuttingActive = false;
       }
     }
