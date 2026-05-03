@@ -140,26 +140,40 @@ void setup() {
   Serial.println("PZEM init E=" + String(lastEnergy, 4));
 
   // Restore today production
+  gResult = AsyncResult();
   Database.get(aClient, "/PC_Monitor/production/todaycuts", gResult);
   for (unsigned long w = millis(); !gResult.isResult() && millis() - w < 5000;) { app.loop(); delay(50); }
   if (gResult.available()) { long s = String(gResult.c_str()).toInt(); if (s > 0) { todayProduction = s; Serial.println("Restored today prod: " + String(s)); } }
 
   // Restore total production
+  gResult = AsyncResult();
   Database.get(aClient, "/PC_Monitor/production/totalcuts", gResult);
   for (unsigned long w = millis(); !gResult.isResult() && millis() - w < 5000;) { app.loop(); delay(50); }
   if (gResult.available()) { long s = String(gResult.c_str()).toInt(); if (s > 0) { totalProduction = s; Serial.println("Restored total prod: " + String(s)); } }
 
   // Restore today energy
-  Database.get(aClient, "/PC_Monitor/energy_history/" + getDateKey() + "/kwh", gResult);
+  gResult = AsyncResult();
+  Database.get(aClient, "/PC_Monitor/energy/today", gResult);
   for (unsigned long w = millis(); !gResult.isResult() && millis() - w < 5000;) { app.loop(); delay(50); }
-  if (gResult.available()) { float s = String(gResult.c_str()).toFloat(); if (s > 0) { todayEnergy = s; Serial.println("Restored today energy: " + String(s, 4)); } }
+  if (gResult.available()) {
+    float s = String(gResult.c_str()).toFloat();
+    Serial.println("Firebase energy/today raw: " + String(gResult.c_str()));
+    if (s > 0) { todayEnergy = s; Serial.println("Restored today energy: " + String(s, 4)); }
+    else Serial.println("Today energy is 0");
+  } else { Serial.println("Today energy fetch failed"); }
 
   // Restore total energy
+  gResult = AsyncResult();
   Database.get(aClient, "/PC_Monitor/energy/total", gResult);
   for (unsigned long w = millis(); !gResult.isResult() && millis() - w < 5000;) { app.loop(); delay(50); }
-  if (gResult.available()) { float s = String(gResult.c_str()).toFloat(); if (s > 0) { totalEnergy = s; Serial.println("Restored total energy: " + String(s, 4)); } }
+  if (gResult.available()) {
+    float s = String(gResult.c_str()).toFloat();
+    Serial.println("Firebase total energy raw: " + String(gResult.c_str()));
+    if (s > 0) { totalEnergy = s; Serial.println("Restored total energy: " + String(s, 4)); }
+  }
 
   // Restore usage minutes
+  gResult = AsyncResult();
   Database.get(aClient, "/PC_Monitor/usage/" + getDateKey() + "/minutes", gResult);
   for (unsigned long w = millis(); !gResult.isResult() && millis() - w < 5000;) { app.loop(); delay(50); }
   if (gResult.available()) { float s = String(gResult.c_str()).toFloat(); if (s > 0) { todayUsageMin = s; Serial.println("Restored usage: " + String(s, 1) + " min"); } }
@@ -178,6 +192,7 @@ void setup() {
 
   // If machine is ON, restore lastOn time from Firebase for accurate duration
   if (pcState) {
+    gResult = AsyncResult();
     Database.get(aClient, "/PC_Monitor/status/lastOn", gResult);
     for (unsigned long w = millis(); !gResult.isResult() && millis() - w < 3000;) { app.loop(); delay(50); }
     if (gResult.available()) {
