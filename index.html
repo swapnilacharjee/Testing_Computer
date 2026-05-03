@@ -266,9 +266,7 @@
 
             // 4b. Production counts
             if (data.production) {
-                const todayKey = getTodayKey();
-                const todayProd = data.production[todayKey] ? (data.production[todayKey].todaycuts || 0) : 0;
-                document.getElementById('todayProduction').innerText = todayProd;
+                document.getElementById('todayProduction').innerText = data.production.todaycuts || 0;
                 document.getElementById('totalProduction').innerText = data.production.totalcuts || 0;
             }
 
