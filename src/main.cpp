@@ -288,8 +288,9 @@ void loop() {
       cuttingActive = false;
       Serial.println("Machine ON at " + ts);
       if (app.ready()) {
-        String json = "{\"status\":{\"pcState\":\"ON\",\"lastOn\":\"" + ts + "\"}}";
-        Database.update(aClient, "/PC_Monitor", object_t(json.c_str()), asyncCB, "onTask");
+        String evKey = String(time(nullptr));
+        String onJson = "{\"status\":{\"pcState\":\"ON\",\"lastOn\":\"" + ts + "\"},\"events\":{\"" + dateKey + "\":{\"" + evKey + "\":{\"state\":\"ON\",\"time\":\"" + ts + "\",\"type\":\"machine\",\"desc\":\"Machine turned ON\"}}}}";
+        Database.update(aClient, "/PC_Monitor", object_t(onJson.c_str()), asyncCB, "onTask");
       }
     } else {
       warmupDone    = false;
@@ -299,8 +300,9 @@ void loop() {
       todayUsageMin += usedMin;
       Serial.printf("Machine OFF at %s (%.1f min)\n", ts.c_str(), usedMin);
       if (app.ready()) {
-        String json = "{\"status\":{\"pcState\":\"OFF\",\"lastOff\":\"" + ts + "\"},\"usage\":{\"" + dateKey + "\":{\"minutes\":" + String(todayUsageMin, 1) + "}}}";
-        Database.update(aClient, "/PC_Monitor", object_t(json.c_str()), asyncCB, "offTask");
+        String evKey = String(time(nullptr));
+        String offJson = "{\"status\":{\"pcState\":\"OFF\",\"lastOff\":\"" + ts + "\"},\"usage\":{\"" + dateKey + "\":{\"minutes\":" + String(todayUsageMin, 1) + "}},\"events\":{\"" + dateKey + "\":{\"" + evKey + "\":{\"state\":\"OFF\",\"time\":\"" + ts + "\",\"type\":\"machine\",\"desc\":\"Machine turned OFF\",\"duration_min\":" + String(usedMin, 1) + "}}}}";
+        Database.update(aClient, "/PC_Monitor", object_t(offJson.c_str()), asyncCB, "offTask");
       }
     }
   }
@@ -347,7 +349,7 @@ void loop() {
 
     if (millis() - lastHistUpdate > 30000) {
       lastHistUpdate = millis();
-      String histJson = "{\"energy_history\":{\"" + dateKey + "\":{\"kwh\":" + String(todayEnergy, 4) + "}},\"energy\":{\"total\":" + String(totalEnergy, 4) + "},\"production\":{\"" + dateKey + "\":{\"todaycuts\":" + String(todayProduction) + "},\"totalcuts\":" + String(totalProduction) + "}}";
+      String histJson = "{\"energy_history\":{\"" + dateKey + "\":{\"kwh\":" + String(todayEnergy, 4) + "}},\"production\":{\"" + dateKey + "\":{\"todaycuts\":" + String(todayProduction) + "}}}";
       Database.update(aClient, "/PC_Monitor", object_t(histJson.c_str()), asyncCB, "histTask");
     }
 
