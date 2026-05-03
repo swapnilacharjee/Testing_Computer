@@ -151,7 +151,7 @@ void setup() {
   for (unsigned long w = millis(); !gResult.isResult() && millis() - w < 5000;) { app.loop(); delay(50); }
   if (gResult.available()) { long s = String(gResult.c_str()).toInt(); if (s > 0) { totalProduction = s; Serial.println("Restored total prod: " + String(s)); } }
 
-  // Restore today energy
+  // Restore today energy — try energy/today first, fallback to energy_history
   gResult = AsyncResult();
   Database.get(aClient, "/PC_Monitor/energy/today", gResult);
   for (unsigned long w = millis(); !gResult.isResult() && millis() - w < 5000;) { app.loop(); delay(50); }
@@ -159,8 +159,17 @@ void setup() {
     float s = String(gResult.c_str()).toFloat();
     Serial.println("Firebase energy/today raw: " + String(gResult.c_str()));
     if (s > 0) { todayEnergy = s; Serial.println("Restored today energy: " + String(s, 4)); }
-    else Serial.println("Today energy is 0");
-  } else { Serial.println("Today energy fetch failed"); }
+  }
+  if (todayEnergy == 0) {
+    gResult = AsyncResult();
+    Database.get(aClient, "/PC_Monitor/energy_history/" + getDateKey() + "/kwh", gResult);
+    for (unsigned long w = millis(); !gResult.isResult() && millis() - w < 5000;) { app.loop(); delay(50); }
+    if (gResult.available()) {
+      float s = String(gResult.c_str()).toFloat();
+      Serial.println("Firebase energy_history raw: " + String(gResult.c_str()));
+      if (s > 0) { todayEnergy = s; Serial.println("Restored today energy from history: " + String(s, 4)); }
+    }
+  }
 
   // Restore total energy
   gResult = AsyncResult();
@@ -374,7 +383,7 @@ void loop() {
 
     if (millis() - lastHistUpdate > 30000) {
       lastHistUpdate = millis();
-      String histJson = "{\"energy_history\":{\"" + dateKey + "\":{\"kwh\":" + String(todayEnergy, 4) + "}},\"production_history\":{\"" + dateKey + "\":{\"todaycuts\":" + String(todayProduction) + "}}}";
+      String histJson = "{\"energy_history\":{\"" + dateKey + "\":{\"kwh\":" + String(todayEnergy, 4) + "}},\"production_history\":{\"" + dateKey + "\":{\"todaycuts\":" + String(todayProduction) + "}},\"energy\":{\"today\":" + String(todayEnergy, 4) + ",\"total\":" + String(totalEnergy, 4) + "}}";
       Database.update(aClient, "/PC_Monitor", object_t(histJson.c_str()), asyncCB, "histTask");
     }
 
