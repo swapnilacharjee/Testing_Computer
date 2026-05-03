@@ -252,18 +252,20 @@
                 document.getElementById('power').innerText   = (data.live.power   || 0).toFixed(1);
             }
 
-            // 3. Energy — show 0 if ESP offline
+            // 3. Energy
             if (data.energy) {
                 document.getElementById('todayEnergy').innerText = isOnline ? (data.energy.today || 0).toFixed(3) : '0.000';
                 document.getElementById('todayCost').innerText   = isOnline ? (data.energy.today_cost || 0).toFixed(2) : '0.00';
+                document.getElementById('totalEnergy').innerText = (data.energy.total || 0).toFixed(3);
+                document.getElementById('totalCost').innerText   = (data.energy.total_cost || 0).toFixed(2);
             }
 
             // 4b. Production counts
             if (data.production) {
                 const todayKey = new Date().toISOString().slice(0,10);
-                const todayProd = data.production[todayKey] ? (data.production[todayKey].count || 0) : 0;
+                const todayProd = data.production[todayKey] ? (data.production[todayKey].todaycuts || 0) : 0;
                 document.getElementById('todayProduction').innerText = todayProd;
-                document.getElementById('totalProduction').innerText = data.production.total || 0;
+                document.getElementById('totalProduction').innerText = data.production.totalcuts || 0;
             }
 
             // 4. Machine status — OFF if ESP offline
@@ -395,7 +397,7 @@
             ? Array.from({length: 7},  (_, i) => daysAgo(6 - i))
             : Array.from({length: 30}, (_, i) => daysAgo(29 - i));
         labels = dates.map(d => d.slice(5));
-        values = dates.map(d => allProduction[d] ? (allProduction[d].count || 0) : 0);
+        values = dates.map(d => allProduction[d] ? (allProduction[d].todaycuts || 0) : 0);
         buildChart(labels, values, 'Cuts', 'prodChart');
     }
 
@@ -414,10 +416,6 @@
     function fetchEnergy() {
         dbFetch("/PC_Monitor/energy_history.json").then(data => {
             allEnergy = data || {};
-            let totalKwh = 0;
-            Object.values(allEnergy).forEach(d => { totalKwh += d.kwh || 0; });
-            document.getElementById('totalCost').innerText = (totalKwh * 14).toFixed(2);
-            document.getElementById('totalEnergy').innerText = totalKwh.toFixed(3);
             renderEnergyChart();
         });
     }
