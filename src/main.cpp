@@ -150,6 +150,7 @@ void setup() {
   Database.get(aClient, "/PC_Monitor/production/totalcuts", gResult);
   for (unsigned long w = millis(); !gResult.isResult() && millis() - w < 5000;) { app.loop(); delay(50); }
   if (gResult.available()) { long s = String(gResult.c_str()).toInt(); if (s > 0) { totalProduction = s; Serial.println("Restored total prod: " + String(s)); } }
+  if (totalProduction < todayProduction) { totalProduction = todayProduction; Serial.println("Total prod corrected to: " + String(totalProduction)); }
 
   // Restore today energy
   gResult = AsyncResult();
@@ -177,6 +178,7 @@ void setup() {
     float s = String(gResult.c_str()).toFloat();
     if (s > 0) { totalEnergy = s; Serial.println("Restored total energy: " + String(s, 4)); }
   }
+  if (totalEnergy < todayEnergy) { totalEnergy = todayEnergy; Serial.println("Total energy corrected to: " + String(totalEnergy, 4)); }
 
   // Restore usage minutes
   gResult = AsyncResult();
