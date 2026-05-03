@@ -406,11 +406,8 @@
     }
 
     function fetchProduction() {
-        dbFetch("/PC_Monitor/production.json").then(data => {
-            if (!data) return;
-            // separate date-keyed entries from 'total'
-            allProduction = {};
-            Object.keys(data).forEach(k => { if (k !== 'total') allProduction[k] = data[k]; });
+        dbFetch("/PC_Monitor/production_history.json").then(data => {
+            allProduction = data || {};
             renderProdChart();
         });
     }

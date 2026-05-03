@@ -142,7 +142,7 @@ void setup() {
   Serial.println("PZEM Reset! E=" + String(lastEnergy, 4));
 
   // Restore today production
-  Database.get(aClient, "/PC_Monitor/production/" + getDateKey() + "/todaycuts", gResult);
+  Database.get(aClient, "/PC_Monitor/production/todaycuts", gResult);
   for (unsigned long w = millis(); !gResult.isResult() && millis() - w < 5000;) { app.loop(); delay(50); }
   if (gResult.available()) { long s = String(gResult.c_str()).toInt(); if (s > 0) { todayProduction = s; Serial.println("Restored today prod: " + String(s)); } }
 
@@ -269,7 +269,7 @@ void loop() {
     lastEnergy    = 0;
     // totalEnergy is cumulative, do NOT reset on midnight
     String newDateKey = getDateKey();
-    String midJson = "{\"energy\":{\"today\":0,\"today_cost\":0},\"production\":{\"" + newDateKey + "\":{\"todaycuts\":0}},\"usage\":{\"" + newDateKey + "\":{\"minutes\":0}}}";
+    String midJson = "{\"energy\":{\"today\":0,\"today_cost\":0},\"production\":{\"todaycuts\":0},\"production_history\":{\"" + newDateKey + "\":{\"todaycuts\":0}},\"usage\":{\"" + newDateKey + "\":{\"minutes\":0}}}";
     Database.update(aClient, "/PC_Monitor", object_t(midJson.c_str()), asyncCB, "midReset");
     Serial.println("Midnight reset!");
   }
@@ -361,7 +361,7 @@ void loop() {
 
     if (millis() - lastHistUpdate > 30000) {
       lastHistUpdate = millis();
-      String histJson = "{\"energy_history\":{\"" + dateKey + "\":{\"kwh\":" + String(todayEnergy, 4) + "}},\"production\":{\"" + dateKey + "\":{\"todaycuts\":" + String(todayProduction) + "}}}";
+      String histJson = "{\"energy_history\":{\"" + dateKey + "\":{\"kwh\":" + String(todayEnergy, 4) + "}},\"production_history\":{\"" + dateKey + "\":{\"todaycuts\":" + String(todayProduction) + "}}}";
       Database.update(aClient, "/PC_Monitor", object_t(histJson.c_str()), asyncCB, "histTask");
     }
 
