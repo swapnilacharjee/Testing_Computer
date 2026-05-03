@@ -77,7 +77,10 @@ AsyncResult gResult;
 unsigned long machineOnTime   = 0;   // millis() when machine turned ON
 bool  warmupDone    = false;
 bool  cuttingActive = false;
-bool  prodDirty     = false;  // flag: production changed, needs Firebase update
+bool  prodDirty     = false;
+bool  pzemReady     = false;  // skip first few PZEM readings after reset
+unsigned long pzemReadyTime = 0;
+#define PZEM_SETTLE_MS 5000UL  // wait 5s after reset before trusting energy  // flag: production changed, needs Firebase update
 long  todayProduction = 0;
 long  totalProduction = 0;
 
@@ -94,7 +97,7 @@ String getTimestamp() {
   time_t now = time(nullptr);
   struct tm* t = localtime(&now);
   char buf[25];
-  sprintf(buf, "%04d-%02d-%02d %02d:%02d:%02d", t->tm_year+1900, t->tm_mon+1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
+  snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d:%02d", t->tm_year+1900, t->tm_mon+1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
   return String(buf);
 }
 
@@ -102,7 +105,7 @@ String getDateKey() {
   time_t now = time(nullptr);
   struct tm* t = localtime(&now);
   char buf[11];
-  sprintf(buf, "%04d-%02d-%02d", t->tm_year+1900, t->tm_mon+1, t->tm_mday);
+  snprintf(buf, sizeof(buf), "%04d-%02d-%02d", t->tm_year+1900, t->tm_mon+1, t->tm_mday);
   return String(buf);
 }
 
@@ -134,6 +137,8 @@ void setup() {
   float initE = pzem.energy();
   lastEnergy  = isnan(initE) ? 0 : initE;
   todayEnergy = 0;
+  pzemReady     = false;
+  pzemReadyTime = millis();
   Serial.println("PZEM Reset! E=" + String(lastEnergy, 4));
 
   // Restore today production
@@ -226,11 +231,18 @@ void loop() {
   if (isnan(current)) current = 0;
   if (isnan(power))   power   = 0;
 
-  // Track today energy (only increment, never jump, skip if PZEM returned bad value)
-  if (!isnan(energy) && energy > 0) {
+  // Track today energy
+  if (!pzemReady) {
+    if (millis() - pzemReadyTime >= PZEM_SETTLE_MS) {
+      pzemReady  = true;
+      float e    = pzem.energy();
+      lastEnergy = (!isnan(e) && e > 0) ? e : 0;
+      Serial.println("PZEM settled. lastEnergy=" + String(lastEnergy, 4));
+    }
+  } else if (!isnan(energy) && energy > 0) {
     if (energy > lastEnergy) {
       float diff = energy - lastEnergy;
-      if (diff < 0.005f) {  // max 0.005 kWh (5Wh) per 2s = 9000W sanity check
+      if (diff < 0.005f) {
         todayEnergy += diff;
         totalEnergy += diff;
       } else {
