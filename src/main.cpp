@@ -87,7 +87,7 @@ long  totalProduction = 0;
 
 // ---------------- TIME ----------------
 void syncTime() {
-  configTime(6 * 3600, 0, "time.google.com", "pool.ntp.org");
+  configTime(0, 0, "time.google.com", "pool.ntp.org");
   Serial.print("Syncing time");
   int retry = 0;
   while (time(nullptr) < 1000000000 && retry < 40) { delay(250); Serial.print("."); retry++; }
@@ -95,16 +95,16 @@ void syncTime() {
 }
 
 String getTimestamp() {
-  time_t now = time(nullptr);
-  struct tm* t = localtime(&now);
+  time_t now = time(nullptr) + 6 * 3600;
+  struct tm* t = gmtime(&now);
   char buf[25];
   snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d:%02d", t->tm_year+1900, t->tm_mon+1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
   return String(buf);
 }
 
 String getDateKey() {
-  time_t now = time(nullptr);
-  struct tm* t = localtime(&now);
+  time_t now = time(nullptr) + 6 * 3600;
+  struct tm* t = gmtime(&now);
   char buf[11];
   snprintf(buf, sizeof(buf), "%04d-%02d-%02d", t->tm_year+1900, t->tm_mon+1, t->tm_mday);
   return String(buf);
