@@ -213,8 +213,12 @@
             });
     }
 
+    function getTodayKey() {
+        const d = new Date(Date.now() + 6 * 3600 * 1000);
+        return d.toISOString().slice(0, 10);
+    }
     function dbFetch(path) { return fetch(`${DB_URL}${path}?auth=${DB_SECRET}`).then(r => r.json()); }
-    function daysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
+    function daysAgo(n) { const d = new Date(Date.now() + 6*3600*1000); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
 
     function fetchLive() {
         dbFetch("/PC_Monitor.json").then(data => {
@@ -262,7 +266,7 @@
 
             // 4b. Production counts
             if (data.production) {
-                const todayKey = new Date().toISOString().slice(0,10);
+                const todayKey = getTodayKey();
                 const todayProd = data.production[todayKey] ? (data.production[todayKey].todaycuts || 0) : 0;
                 document.getElementById('todayProduction').innerText = todayProd;
                 document.getElementById('totalProduction').innerText = data.production.totalcuts || 0;
