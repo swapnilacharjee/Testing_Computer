@@ -87,24 +87,30 @@ long  totalProduction = 0;
 
 // ---------------- TIME ----------------
 void syncTime() {
-  configTime(0, 0, "time.google.com", "pool.ntp.org");
+  // Bangladesh = UTC+6, no DST
+  configTime(6 * 3600, 0, "time.google.com", "pool.ntp.org");
+  setenv("TZ", "BDT-6", 1);
+  tzset();
   Serial.print("Syncing time");
   int retry = 0;
   while (time(nullptr) < 1000000000 && retry < 40) { delay(250); Serial.print("."); retry++; }
   Serial.println(time(nullptr) < 1000000000 ? " FAILED" : " OK");
+  time_t now = time(nullptr);
+  Serial.println("BD Time: " + String(ctime(&now)));
 }
 
 String getTimestamp() {
-  time_t now = time(nullptr) + 6 * 3600;
-  struct tm* t = gmtime(&now);
+  time_t now = time(nullptr);
+  struct tm* t = localtime(&now);
   char buf[25];
-  snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d:%02d", t->tm_year+1900, t->tm_mon+1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
+  snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d:%02d",
+    t->tm_year+1900, t->tm_mon+1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
   return String(buf);
 }
 
 String getDateKey() {
-  time_t now = time(nullptr) + 6 * 3600;
-  struct tm* t = gmtime(&now);
+  time_t now = time(nullptr);
+  struct tm* t = localtime(&now);
   char buf[11];
   snprintf(buf, sizeof(buf), "%04d-%02d-%02d", t->tm_year+1900, t->tm_mon+1, t->tm_mday);
   return String(buf);
@@ -276,25 +282,23 @@ void loop() {
   }
   if (isnan(energy)) energy = 0;
 
-  // Midnight reset
-  time_t nowT = time(nullptr);
-  struct tm* t = localtime(&nowT);
-  int today = t->tm_mday;
-  if (lastDay == -1) lastDay = today;
-  if (today != lastDay) {
-    lastDay = today;
-    todayEnergy   = 0;
-    todayUsageMin = 0;
+  // Midnight reset — full date string compare (Bangladesh time via localtime)
+  String todayKey = getDateKey();
+  static String lastDateKey = "";
+  if (lastDateKey == "") lastDateKey = todayKey;
+  if (todayKey != lastDateKey) {
+    String prevDateKey = lastDateKey;
+    lastDateKey     = todayKey;
+    todayEnergy     = 0;
+    todayUsageMin   = 0;
     todayProduction = 0;
-    warmupDone    = false;
-    cuttingActive = false;
+    warmupDone      = false;
+    cuttingActive   = false;
     pzem.resetEnergy();
-    lastEnergy    = 0;
-    // totalEnergy is cumulative, do NOT reset on midnight
-    String newDateKey = getDateKey();
-    String midJson = "{\"energy\":{\"today\":0,\"today_cost\":0},\"production\":{\"todaycuts\":0},\"production_history\":{\"" + newDateKey + "\":{\"todaycuts\":0}},\"usage\":{\"" + newDateKey + "\":{\"minutes\":0}}}";
+    lastEnergy      = 0;
+    String midJson = "{\"energy\":{\"today\":0,\"today_cost\":0},\"production\":{\"todaycuts\":0},\"production_history\":{\"" + todayKey + "\":{\"todaycuts\":0}},\"usage\":{\"" + todayKey + "\":{\"minutes\":0}}}";
     Database.update(aClient, "/PC_Monitor", object_t(midJson.c_str()), asyncCB, "midReset");
-    Serial.println("Midnight reset!");
+    Serial.println("Midnight reset! " + prevDateKey + " -> " + todayKey);
   }
 
   // Debounced state detection with hysteresis
