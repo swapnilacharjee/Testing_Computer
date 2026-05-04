@@ -231,17 +231,19 @@ void setup() {
     pcOnSinceUnix = 0;
   }
 
-  // Save to Firebase
+  // Save boot state to Firebase — wait for it to complete
   String ssidStr = WiFi.SSID();
   long unixNow   = time(nullptr);
+  String bootState = pcState ? "ON" : "OFF";
   String json = "{";
   json += "\"esp32\":{\"wifi_ssid\":\"" + ssidStr + "\",\"ip\":\"" + WiFi.localIP().toString() + "\",\"last_seen_unix\":" + String(unixNow) + ",\"last_seen\":\"" + getTimestamp() + "\"},";
-  json += "\"status\":{\"pcState\":\"" + String(pcState ? "ON" : "OFF") + "\"}";
+  json += "\"status\":{\"pcState\":\"" + bootState + "\",\"bootTime\":\"" + getTimestamp() + "\"}";
   json += "}";
   Database.update(aClient, "/PC_Monitor", object_t(json.c_str()), asyncCB, "bootTask");
-
-  // Log boot event removed to reduce queue pressure
-
+  // Wait for boot update to reach Firebase
+  unsigned long bootSend = millis();
+  while (millis() - bootSend < 3000) { app.loop(); delay(50); }
+  Serial.println("Boot state pushed: " + bootState);
   Serial.println("Boot state: " + String(pcState ? "MACHINE ON" : "MACHINE OFF") + " (" + String(bootPower) + "W)");
 }
 

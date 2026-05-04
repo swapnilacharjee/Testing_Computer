@@ -179,6 +179,7 @@
     let currentUsageTab = 'daily', currentEnergyTab = 'daily', currentProdTab = 'daily';
     let allUsage = {}, allEnergy = {}, allProduction = {};
     let lastKnownOnTime = null;
+    let lastKnownPcState = null;  // remember last pcState even when ESP offline
     let espOfflineHandled = false;
     const SYNTH_OFFLINE_KEY = 'powertrack_synthetic_offline';
 
@@ -261,45 +262,39 @@
                 document.getElementById('totalProduction').innerText = data.production.totalcuts || 0;
             }
 
-            // 4. Machine status — OFF if ESP offline
-            const pcOn = isOnline && data.status && data.status.pcState === 'ON';
-            const ring = document.getElementById('statusRing');
+            // 4. Machine status
+            // Always read pcState from Firebase
+            // If ESP is offline, show last known state with warning
+            const fbPcState = data.status && data.status.pcState;
+            if (fbPcState) lastKnownPcState = fbPcState;
+            const pcOn = isOnline
+                ? (fbPcState === 'ON')
+                : (lastKnownPcState === 'ON');  // keep last known when ESP offline
+
+            const ring    = document.getElementById('statusRing');
             const stateEl = document.getElementById('pcState');
-            const subEl = document.getElementById('statusSub');
+            const subEl   = document.getElementById('statusSub');
 
             if (pcOn) {
-                ring.className = 'status-ring on';
+                ring.className    = 'status-ring on';
                 stateEl.textContent = 'MACHINE ON';
                 stateEl.className = 'on';
-                subEl.textContent = 'Machine is running';
-                if (data.status.lastOn) lastKnownOnTime = new Date(data.status.lastOn.replace(' ', 'T'));
-                espOfflineHandled = false;
+                subEl.textContent = isOnline ? 'Machine is running' : 'ESP restarting — last state: ON';
+                if (data.status && data.status.lastOn) lastKnownOnTime = new Date(data.status.lastOn.replace(' ', 'T'));
+                if (isOnline) espOfflineHandled = false;
             } else {
-                ring.className = 'status-ring off';
+                ring.className    = 'status-ring off';
                 stateEl.textContent = 'MACHINE OFF';
                 stateEl.className = 'off';
-                if (!isOnline && data.status && data.status.pcState === 'ON' && !espOfflineHandled) {
+                if (!isOnline && lastKnownPcState === 'ON' && !espOfflineHandled) {
                     espOfflineHandled = true;
-                    const onTime = lastKnownOnTime || (data.status.lastOn ? new Date(data.status.lastOn.replace(' ','T')) : null);
-                    if (onTime) {
-                        writeOfflineEvent(onTime);
-                        const mins = ((Date.now() - onTime.getTime()) / 60000).toFixed(1);
-                        subEl.textContent = `ESP32 offline · Ran ${mins} min`;
-                    } else {
-                        subEl.textContent = 'ESP32 is offline';
-                    }
-                } else if (!isOnline && data.status && data.status.pcState === 'ON') {
-                    const onTime = lastKnownOnTime || (data.status.lastOn ? new Date(data.status.lastOn.replace(' ','T')) : null);
-                    if (onTime) {
-                        const mins = ((Date.now() - onTime.getTime()) / 60000).toFixed(1);
-                        subEl.textContent = `ESP32 offline · Ran ${mins} min`;
-                    } else {
-                        subEl.textContent = 'ESP32 is offline';
-                    }
-                } else {
-                    subEl.textContent = isOnline ? 'Machine is powered off' : 'ESP32 is offline';
-                    if (isOnline) { lastKnownOnTime = null; espOfflineHandled = false; }
+                    const onTime = lastKnownOnTime || (data.status && data.status.lastOn ? new Date(data.status.lastOn.replace(' ','T')) : null);
+                    if (onTime) writeOfflineEvent(onTime);
                 }
+                subEl.textContent = isOnline
+                    ? 'Machine is powered off'
+                    : (lastKnownPcState === 'ON' ? 'ESP restarting — last state: ON' : 'ESP32 is offline');
+                if (isOnline) { lastKnownOnTime = null; espOfflineHandled = false; }
             }
 
             if (data.status) {
