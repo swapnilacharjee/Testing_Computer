@@ -415,11 +415,12 @@
         }).catch(() => {});
     }
 
+    let cleanupTimer = null;
+
     function fetchHistory() {
         dbFetch('/PC_Monitor/events.json').then(data => {
             const tbody = document.getElementById('historyBody');
             const rows = [];
-            const keyMap = []; // track {date, key} for cleanup
 
             if (data && typeof data === 'object') {
                 Object.keys(data).sort().reverse().forEach(date => {
@@ -430,14 +431,11 @@
                         if (!val || typeof val !== 'object') return;
                         if (val.time) {
                             rows.push({ date, key, ...val });
-                            keyMap.push({ date, key });
                         } else {
                             Object.keys(val).forEach(innerKey => {
                                 const inner = val[innerKey];
-                                if (inner && typeof inner === 'object' && inner.time) {
+                                if (inner && typeof inner === 'object' && inner.time)
                                     rows.push({ date, key, innerKey, ...inner });
-                                    keyMap.push({ date, key, innerKey });
-                                }
                             });
                         }
                     });
@@ -446,14 +444,18 @@
 
             rows.sort((a, b) => (b.time || '').localeCompare(a.time || ''));
 
-            // Delete events beyond last 15
-            if (rows.length > 15) {
-                rows.slice(15).forEach(ev => {
-                    const path = ev.innerKey
-                        ? `/PC_Monitor/events/${ev.date}/${ev.key}/${ev.innerKey}.json?auth=${DB_SECRET}`
-                        : `/PC_Monitor/events/${ev.date}/${ev.key}.json?auth=${DB_SECRET}`;
-                    fetch(`${DB_URL}${path}`, { method: 'DELETE' });
-                });
+            // Schedule cleanup with 30s delay — prevents deleting events that just arrived
+            if (rows.length > 20) {
+                if (cleanupTimer) clearTimeout(cleanupTimer);
+                cleanupTimer = setTimeout(() => {
+                    rows.slice(20).forEach(ev => {
+                        const path = ev.innerKey
+                            ? `/PC_Monitor/events/${ev.date}/${ev.key}/${ev.innerKey}.json?auth=${DB_SECRET}`
+                            : `/PC_Monitor/events/${ev.date}/${ev.key}.json?auth=${DB_SECRET}`;
+                        fetch(`${DB_URL}${path}`, { method: 'DELETE' });
+                    });
+                    cleanupTimer = null;
+                }, 30000);
             }
 
             if (!rows.length) {
