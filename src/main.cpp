@@ -129,21 +129,27 @@ void pruneEvents(const String &dateKey) {
   for (unsigned long w = millis(); !evResult.isResult() && millis() - w < 3000;) { app.loop(); delay(50); }
   if (!evResult.available()) return;
   String raw = evResult.c_str();
-  // Count top-level keys (depth==1 opening braces)
-  int count = 0, depth = 0;
+
+  // Count top-level keys by counting colons at depth==1
+  // Structure: {"key1":{...},"key2":{...}}
+  // Each top-level key has exactly one ':' at depth 1
+  int count = 0;
+  int depth = 0;
   bool inStr = false;
   char prev = 0;
   for (int i = 0; i < (int)raw.length(); i++) {
     char c = raw[i];
     if (c == '"' && prev != '\\') inStr = !inStr;
     if (!inStr) {
-      if (c == '{') { depth++; if (depth == 2) count++; }
-      else if (c == '}') depth--;
+      if      (c == '{' || c == '[') depth++;
+      else if (c == '}' || c == ']') depth--;
+      else if (c == ':' && depth == 1) count++;
     }
     prev = c;
   }
   if (count <= MAX_EVENTS) return;
-  // Delete oldest key (first key in JSON)
+
+  // Find oldest key (first quoted key at depth 1)
   int ks = raw.indexOf('"') + 1;
   int ke = raw.indexOf('"', ks);
   if (ks > 0 && ke > ks) {
