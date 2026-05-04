@@ -328,7 +328,10 @@ void loop() {
       Serial.println("Machine ON at " + ts);
       if (app.ready()) {
         String evKey = String(time(nullptr));
-        String onJson = "{\"status\":{\"pcState\":\"ON\",\"lastOn\":\"" + ts + "\"},\"events\":{\"" + dateKey + "\":{\"" + evKey + "\":{\"state\":\"ON\",\"time\":\"" + ts + "\",\"type\":\"machine\",\"desc\":\"Machine turned ON\"}}}}";
+        String onJson = "{";
+        onJson += "\"status\":{\"pcState\":\"ON\",\"lastOn\":\"" + ts + "\"},";
+        onJson += "\"events\":{\"" + dateKey + "\":{\"" + evKey + "\":{\"state\":\"ON\",\"time\":\"" + ts + "\",\"type\":\"machine\",\"desc\":\"Machine turned ON\"}}}";
+        onJson += "}";
         Database.update(aClient, "/PC_Monitor", object_t(onJson.c_str()), asyncCB, "onTask");
       }
     } else {
@@ -340,7 +343,11 @@ void loop() {
       Serial.printf("Machine OFF at %s (%.1f min)\n", ts.c_str(), usedMin);
       if (app.ready()) {
         String evKey = String(time(nullptr));
-        String offJson = "{\"status\":{\"pcState\":\"OFF\",\"lastOff\":\"" + ts + "\"},\"usage\":{\"" + dateKey + "\":{\"minutes\":" + String(todayUsageMin, 1) + "}},\"events\":{\"" + dateKey + "\":{\"" + evKey + "\":{\"state\":\"OFF\",\"time\":\"" + ts + "\",\"type\":\"machine\",\"desc\":\"Machine turned OFF\",\"duration_min\":" + String(usedMin, 1) + "}}}}";
+        String offJson = "{";
+        offJson += "\"status\":{\"pcState\":\"OFF\",\"lastOff\":\"" + ts + "\"},";
+        offJson += "\"usage\":{\"" + dateKey + "\":{\"minutes\":" + String(todayUsageMin, 1) + "}},";
+        offJson += "\"events\":{\"" + dateKey + "\":{\"" + evKey + "\":{\"state\":\"OFF\",\"time\":\"" + ts + "\",\"type\":\"machine\",\"desc\":\"Machine turned OFF\",\"duration_min\":" + String(usedMin, 1) + "}}}";
+        offJson += "}";
         Database.update(aClient, "/PC_Monitor", object_t(offJson.c_str()), asyncCB, "offTask");
       }
     }

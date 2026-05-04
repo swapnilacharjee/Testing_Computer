@@ -419,18 +419,23 @@
         dbFetch('/PC_Monitor/events.json').then(data => {
             const tbody = document.getElementById('historyBody');
             const rows = [];
+
             if (data && typeof data === 'object') {
                 Object.keys(data).sort().reverse().forEach(date => {
-                    const dateEvents = data[date];
-                    if (typeof dateEvents !== 'object') return;
-                    Object.values(dateEvents).forEach(ev => {
-                        if (!ev || typeof ev !== 'object') return;
-                        // handle both flat {state,time,...} and nested {{state,time,...}}
-                        if (ev.time) {
-                            rows.push({ date, ...ev });
+                    const dateNode = data[date];
+                    if (!dateNode || typeof dateNode !== 'object') return;
+
+                    // Each value under date is either:
+                    // A) direct event: {state, time, desc, ...}
+                    // B) unix-key container: {"1752xxx": {state, time, desc, ...}}
+                    Object.values(dateNode).forEach(val => {
+                        if (!val || typeof val !== 'object') return;
+                        if (val.time) {
+                            // Case A: direct event
+                            rows.push({ date, ...val });
                         } else {
-                            // ev is itself a container of event objects
-                            Object.values(ev).forEach(inner => {
+                            // Case B: unix-key container
+                            Object.values(val).forEach(inner => {
                                 if (inner && typeof inner === 'object' && inner.time)
                                     rows.push({ date, ...inner });
                             });
@@ -438,27 +443,36 @@
                     });
                 });
             }
+
             rows.sort((a, b) => (b.time || '').localeCompare(a.time || ''));
+
             if (!rows.length) {
                 tbody.innerHTML = '<tr><td colspan="5" class="empty">No events yet</td></tr>';
                 return;
             }
-            tbody.innerHTML = rows.slice(0, 20).map(ev => {
-                const isOn   = ev.state === 'ON';
-                const isEsp  = ev.type  === 'esp32';
+
+            tbody.innerHTML = rows.slice(0, 25).map(ev => {
+                const isOn  = ev.state === 'ON';
+                const isEsp = ev.type  === 'esp32';
                 const color  = isEsp ? '#a855f7' : (isOn ? '#22c55e' : '#ef4444');
-                const bg     = isEsp ? 'rgba(168,85,247,0.15)'  : (isOn ? 'rgba(34,197,94,0.15)'  : 'rgba(239,68,68,0.15)');
-                const border = isEsp ? 'rgba(168,85,247,0.3)'   : (isOn ? 'rgba(34,197,94,0.3)'   : 'rgba(239,68,68,0.3)');
-                const label  = isEsp ? 'ESP32' : (ev.state || '--');
+                const bg     = isEsp ? 'rgba(168,85,247,0.15)' : (isOn ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)');
+                const border = isEsp ? 'rgba(168,85,247,0.3)'  : (isOn ? 'rgba(34,197,94,0.3)'  : 'rgba(239,68,68,0.3)');
+                const label  = isEsp ? 'ESP32' : (isOn ? 'ON' : 'OFF');
+                const dur    = ev.duration_min != null ? Number(ev.duration_min).toFixed(1) + ' min' : '—';
+                const timeStr = ev.time ? ev.time.slice(0, 19) : '--';
+                const dateStr = ev.date || (ev.time ? ev.time.slice(0, 10) : '--');
                 return `<tr>
-                    <td style="color:#94a3b8">${ev.date || '--'}</td>
-                    <td style="font-weight:500">${ev.time ? ev.time.slice(11,19) : '--'}</td>
+                    <td style="color:#94a3b8">${dateStr}</td>
+                    <td style="font-weight:500">${timeStr.slice(11)}</td>
                     <td><span class="badge" style="background:${bg};color:${color};border:1px solid ${border}">${label}</span></td>
                     <td style="color:#cbd5e1;font-size:11px">${ev.desc || '--'}</td>
-                    <td style="color:#64748b">${ev.duration_min != null ? Number(ev.duration_min).toFixed(1) + ' min' : '—'}</td>
+                    <td style="color:#64748b">${dur}</td>
                 </tr>`;
             }).join('');
-        }).catch(e => { console.error('fetchHistory error:', e); });
+        }).catch(e => {
+            console.error('fetchHistory error:', e);
+            document.getElementById('historyBody').innerHTML = '<tr><td colspan="5" class="empty">Error loading events</td></tr>';
+        });
     }
 
     fetchLive(); fetchProduction(); fetchUsage(); fetchEnergy(); fetchHistory();
