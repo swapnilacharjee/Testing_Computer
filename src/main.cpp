@@ -30,8 +30,8 @@ void connectWiFi() {
 }
 
 // ---------------- FIREBASE ----------------
-#define DATABASE_URL    "https://testing-pc-5d796-default-rtdb.asia-southeast1.firebasedatabase.app"
-#define DATABASE_SECRET "r9B6FUMY9N1b4Nvs8iNuIuOH5qy67kPPHJNaazEM"
+#define DATABASE_URL    "https://mais-factory-monitor-default-rtdb.asia-southeast1.firebasedatabase.app"
+#define DATABASE_SECRET "qQT6igdRFKTwyGHeezvAfuc4RW0D6VNVRu9LHakV"
 
 void asyncCB(AsyncResult &aResult);
 WiFiClientSecure ssl_client;
