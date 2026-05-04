@@ -176,9 +176,9 @@ void setup() {
   pzemReadyTime = millis();
   Serial.println("PZEM init E=" + String(lastEnergy, 4));
 
-  // Restore today production
+  // Restore today production (only if date matches today)
   gResult = AsyncResult();
-  Database.get(aClient, "/PC_Monitor/production/todaycuts", gResult);
+  Database.get(aClient, "/PC_Monitor/production_history/" + getDateKey() + "/todaycuts", gResult);
   for (unsigned long w = millis(); !gResult.isResult() && millis() - w < 5000;) { app.loop(); delay(50); }
   if (gResult.available()) { long s = String(gResult.c_str()).toInt(); if (s > 0) { todayProduction = s; Serial.println("Restored today prod: " + String(s)); } }
 
@@ -312,8 +312,11 @@ void loop() {
     cuttingActive   = false;
     pzem.resetEnergy();
     lastEnergy = 0;
-    String midJson = "{\"energy\":{\"today\":0,\"today_cost\":0},\"production\":{\"todaycuts\":0},\"production_history\":{\"" + todayKey + "\":{\"todaycuts\":0}},\"usage\":{\"" + todayKey + "\":{\"minutes\":0}}}";
+    String midJson = "{\"energy\":{\"today\":0,\"today_cost\":0},\"production\":{\"todaycuts\":0},\"production_history\":{\"" + todayKey + "\":{\"todaycuts\":0}},\"usage\":{\"" + todayKey + "\":{\"minutes\":0}},\"energy_history\":{\"" + todayKey + "\":{\"kwh\":0}}}";
     Database.update(aClient, "/PC_Monitor", object_t(midJson.c_str()), asyncCB, "midReset");
+    // Wait to ensure reset reaches Firebase before next loop
+    unsigned long mw = millis();
+    while (millis() - mw < 2000) { app.loop(); delay(50); }
     Serial.println("Midnight reset! " + prev + " -> " + todayKey);
   }
 
