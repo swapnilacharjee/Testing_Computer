@@ -425,8 +425,10 @@
                         const val = dateNode[key];
                         if (!val || typeof val !== 'object') return;
                         if (val.time) {
+                            // direct event: {state, time, ...}
                             rows.push({ date, key, ...val });
                         } else {
+                            // unix-key container: {"1752xxx": {state, time, ...}}
                             Object.keys(val).forEach(innerKey => {
                                 const inner = val[innerKey];
                                 if (inner && typeof inner === 'object' && inner.time)
@@ -438,20 +440,6 @@
             }
 
             rows.sort((a, b) => (b.time || '').localeCompare(a.time || ''));
-
-            // Schedule cleanup with 30s delay — prevents deleting events that just arrived
-            if (rows.length > 20) {
-                if (cleanupTimer) clearTimeout(cleanupTimer);
-                cleanupTimer = setTimeout(() => {
-                    rows.slice(20).forEach(ev => {
-                        const path = ev.innerKey
-                            ? `/PC_Monitor/events/${ev.date}/${ev.key}/${ev.innerKey}.json?auth=${DB_SECRET}`
-                            : `/PC_Monitor/events/${ev.date}/${ev.key}.json?auth=${DB_SECRET}`;
-                        fetch(`${DB_URL}${path}`, { method: 'DELETE' });
-                    });
-                    cleanupTimer = null;
-                }, 30000);
-            }
 
             if (!rows.length) {
                 tbody.innerHTML = '<tr><td colspan="5" class="empty">No events yet</td></tr>';

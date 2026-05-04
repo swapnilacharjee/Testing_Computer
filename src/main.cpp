@@ -57,37 +57,35 @@ float todayEnergy   = 0;
 float totalEnergy   = 0;
 float todayUsageMin = 0;
 bool  pcState = false, lastPcState = false;
-const float ON_THRESHOLD  = 10.0;   // ON threshold
-const float OFF_THRESHOLD = 5.0;    // OFF threshold (hysteresis)
+const float ON_THRESHOLD  = 10.0;
+const float OFF_THRESHOLD = 5.0;
 unsigned long stateChangeTime = 0;
 bool pendingState = false;
 bool hasPending   = false;
-#define STATE_DEBOUNCE_MS 5000UL    // 5s debounce
-#define UPDATE_INTERVAL 5000
+#define STATE_DEBOUNCE_MS 5000UL
+#define UPDATE_INTERVAL   5000
 bool updatePending = false;
-int lastDay = -1;
 
-// Reusable AsyncResult (global to avoid stack overflow)
 AsyncResult gResult;
 
 // ---------------- PRODUCTION ----------------
-#define CUT_AMP_TRIGGER  0.22f   // rising above this = cut started
-#define CUT_AMP_RESET    0.18f   // falling below this = ready for next cut
+#define CUT_AMP_TRIGGER   0.22f
+#define CUT_AMP_RESET     0.18f
 #define MACHINE_WARMUP_MS 15000UL
+#define MAX_EVENTS        30
 
-unsigned long machineOnTime   = 0;   // millis() when machine turned ON
+unsigned long machineOnTime = 0;
 bool  warmupDone    = false;
 bool  cuttingActive = false;
 bool  prodDirty     = false;
-bool  pzemReady     = false;  // skip first few PZEM readings after reset
+bool  pzemReady     = false;
 unsigned long pzemReadyTime = 0;
-#define PZEM_SETTLE_MS 5000UL  // wait 5s after reset before trusting energy  // flag: production changed, needs Firebase update
+#define PZEM_SETTLE_MS 5000UL
 long  todayProduction = 0;
 long  totalProduction = 0;
 
 // ---------------- TIME ----------------
 void syncTime() {
-  // Bangladesh = UTC+6, no DST
   configTime(6 * 3600, 0, "time.google.com", "pool.ntp.org");
   setenv("TZ", "BDT-6", 1);
   tzset();
@@ -116,10 +114,43 @@ String getDateKey() {
   return String(buf);
 }
 
+// ---------------- CALLBACKS ----------------
 void asyncCB(AsyncResult &aResult) {
   if (aResult.isError())
     Firebase.printf("Error [%s]: %s, code: %d\n", aResult.uid().c_str(), aResult.error().message().c_str(), aResult.error().code());
   updatePending = false;
+}
+
+// ---------------- PRUNE EVENTS ----------------
+// Keep only last MAX_EVENTS per date — delete oldest if exceeded
+void pruneEvents(const String &dateKey) {
+  AsyncResult evResult;
+  Database.get(aClient, "/PC_Monitor/events/" + dateKey, evResult);
+  for (unsigned long w = millis(); !evResult.isResult() && millis() - w < 3000;) { app.loop(); delay(50); }
+  if (!evResult.available()) return;
+  String raw = evResult.c_str();
+  // Count top-level keys (depth==1 opening braces)
+  int count = 0, depth = 0;
+  bool inStr = false;
+  char prev = 0;
+  for (int i = 0; i < (int)raw.length(); i++) {
+    char c = raw[i];
+    if (c == '"' && prev != '\\') inStr = !inStr;
+    if (!inStr) {
+      if (c == '{') { depth++; if (depth == 2) count++; }
+      else if (c == '}') depth--;
+    }
+    prev = c;
+  }
+  if (count <= MAX_EVENTS) return;
+  // Delete oldest key (first key in JSON)
+  int ks = raw.indexOf('"') + 1;
+  int ke = raw.indexOf('"', ks);
+  if (ks > 0 && ke > ks) {
+    String oldKey = raw.substring(ks, ke);
+    Database.remove(aClient, "/PC_Monitor/events/" + dateKey + "/" + oldKey, asyncCB, "pruneEv");
+    Serial.println("Pruned old event: " + oldKey);
+  }
 }
 
 // ---------------- SETUP ----------------
@@ -138,10 +169,9 @@ void setup() {
   while (!app.ready() && millis() - waitStart < 10000) { app.loop(); delay(50); }
   Serial.println("Firebase Ready!");
 
-  // Do NOT reset PZEM energy on reboot — restore from Firebase instead
   delay(2000);
   float initE = pzem.energy();
-  lastEnergy  = (!isnan(initE) && initE > 0) ? initE : 0;
+  lastEnergy    = (!isnan(initE) && initE > 0) ? initE : 0;
   pzemReady     = false;
   pzemReadyTime = millis();
   Serial.println("PZEM init E=" + String(lastEnergy, 4));
@@ -157,35 +187,26 @@ void setup() {
   Database.get(aClient, "/PC_Monitor/production/totalcuts", gResult);
   for (unsigned long w = millis(); !gResult.isResult() && millis() - w < 5000;) { app.loop(); delay(50); }
   if (gResult.available()) { long s = String(gResult.c_str()).toInt(); if (s > 0) { totalProduction = s; Serial.println("Restored total prod: " + String(s)); } }
-  if (totalProduction < todayProduction) { totalProduction = todayProduction; Serial.println("Total prod corrected to: " + String(totalProduction)); }
+  if (totalProduction < todayProduction) totalProduction = todayProduction;
 
   // Restore today energy
   gResult = AsyncResult();
   Database.get(aClient, "/PC_Monitor/energy/today", gResult);
   for (unsigned long w = millis(); !gResult.isResult() && millis() - w < 5000;) { app.loop(); delay(50); }
-  if (gResult.available()) {
-    float s = String(gResult.c_str()).toFloat();
-    if (s > 0) { todayEnergy = s; Serial.println("Restored today energy: " + String(s, 4)); }
-  }
+  if (gResult.available()) { float s = String(gResult.c_str()).toFloat(); if (s > 0) { todayEnergy = s; Serial.println("Restored today energy: " + String(s, 4)); } }
   if (todayEnergy == 0) {
     gResult = AsyncResult();
     Database.get(aClient, "/PC_Monitor/energy_history/" + getDateKey() + "/kwh", gResult);
     for (unsigned long w = millis(); !gResult.isResult() && millis() - w < 5000;) { app.loop(); delay(50); }
-    if (gResult.available()) {
-      float s = String(gResult.c_str()).toFloat();
-      if (s > 0) { todayEnergy = s; Serial.println("Restored today energy from history: " + String(s, 4)); }
-    }
+    if (gResult.available()) { float s = String(gResult.c_str()).toFloat(); if (s > 0) { todayEnergy = s; Serial.println("Restored today energy from history: " + String(s, 4)); } }
   }
 
   // Restore total energy
   gResult = AsyncResult();
   Database.get(aClient, "/PC_Monitor/energy/total", gResult);
   for (unsigned long w = millis(); !gResult.isResult() && millis() - w < 5000;) { app.loop(); delay(50); }
-  if (gResult.available()) {
-    float s = String(gResult.c_str()).toFloat();
-    if (s > 0) { totalEnergy = s; Serial.println("Restored total energy: " + String(s, 4)); }
-  }
-  if (totalEnergy < todayEnergy) { totalEnergy = todayEnergy; Serial.println("Total energy corrected to: " + String(totalEnergy, 4)); }
+  if (gResult.available()) { float s = String(gResult.c_str()).toFloat(); if (s > 0) { totalEnergy = s; Serial.println("Restored total energy: " + String(s, 4)); } }
+  if (totalEnergy < todayEnergy) totalEnergy = todayEnergy;
 
   // Restore usage minutes
   gResult = AsyncResult();
@@ -201,11 +222,11 @@ void setup() {
   lastPcState = pcState;
   hasPending  = false;
   if (pcState) {
-    machineOnTime = millis() - MACHINE_WARMUP_MS; // treat as already warmed up on reboot
+    machineOnTime = millis() - MACHINE_WARMUP_MS;
     warmupDone    = true;
   }
 
-  // If machine is ON, restore lastOn time from Firebase for accurate duration
+  // Restore lastOn time if machine is ON
   if (pcState) {
     gResult = AsyncResult();
     Database.get(aClient, "/PC_Monitor/status/lastOn", gResult);
@@ -217,8 +238,7 @@ void setup() {
       if (sscanf(lastOnStr.c_str(), "%d-%d-%d %d:%d:%d",
           &tm.tm_year, &tm.tm_mon, &tm.tm_mday,
           &tm.tm_hour, &tm.tm_min, &tm.tm_sec) == 6) {
-        tm.tm_year -= 1900; tm.tm_mon -= 1;
-        tm.tm_isdst = -1;
+        tm.tm_year -= 1900; tm.tm_mon -= 1; tm.tm_isdst = -1;
         pcOnSinceUnix = mktime(&tm);
         Serial.println("Restored lastOn: " + lastOnStr);
       } else {
@@ -231,20 +251,18 @@ void setup() {
     pcOnSinceUnix = 0;
   }
 
-  // Save boot state to Firebase — wait for it to complete
-  String ssidStr = WiFi.SSID();
-  long unixNow   = time(nullptr);
+  // Push boot state to Firebase and wait for confirmation
+  String ssidStr   = WiFi.SSID();
   String bootState = pcState ? "ON" : "OFF";
+  long   unixNow   = time(nullptr);
   String json = "{";
   json += "\"esp32\":{\"wifi_ssid\":\"" + ssidStr + "\",\"ip\":\"" + WiFi.localIP().toString() + "\",\"last_seen_unix\":" + String(unixNow) + ",\"last_seen\":\"" + getTimestamp() + "\"},";
   json += "\"status\":{\"pcState\":\"" + bootState + "\",\"bootTime\":\"" + getTimestamp() + "\"}";
   json += "}";
   Database.update(aClient, "/PC_Monitor", object_t(json.c_str()), asyncCB, "bootTask");
-  // Wait for boot update to reach Firebase
   unsigned long bootSend = millis();
   while (millis() - bootSend < 3000) { app.loop(); delay(50); }
-  Serial.println("Boot state pushed: " + bootState);
-  Serial.println("Boot state: " + String(pcState ? "MACHINE ON" : "MACHINE OFF") + " (" + String(bootPower) + "W)");
+  Serial.println("Boot state pushed: " + bootState + " (" + String(bootPower) + "W)");
 }
 
 // ---------------- LOOP ----------------
@@ -265,31 +283,27 @@ void loop() {
   // Track today energy
   if (!pzemReady) {
     if (millis() - pzemReadyTime >= PZEM_SETTLE_MS) {
-      pzemReady  = true;
-      float e    = pzem.energy();
+      pzemReady = true;
+      float e = pzem.energy();
       if (!isnan(e) && e > 0) lastEnergy = e;
       Serial.println("PZEM settled. lastEnergy=" + String(lastEnergy, 4));
     }
   } else if (!isnan(energy) && energy > 0) {
     if (energy > lastEnergy) {
       float diff = energy - lastEnergy;
-      if (diff < 0.005f) {
-        todayEnergy += diff;
-        totalEnergy += diff;
-      } else {
-        Serial.printf("Energy spike ignored: %.4f kWh\n", diff);
-      }
+      if (diff < 0.005f) { todayEnergy += diff; totalEnergy += diff; }
+      else Serial.printf("Energy spike ignored: %.4f kWh\n", diff);
     }
     lastEnergy = energy;
   }
   if (isnan(energy)) energy = 0;
 
-  // Midnight reset — full date string compare (Bangladesh time via localtime)
+  // Midnight reset
   String todayKey = getDateKey();
   static String lastDateKey = "";
   if (lastDateKey == "") lastDateKey = todayKey;
   if (todayKey != lastDateKey) {
-    String prevDateKey = lastDateKey;
+    String prev = lastDateKey;
     lastDateKey     = todayKey;
     todayEnergy     = 0;
     todayUsageMin   = 0;
@@ -297,10 +311,10 @@ void loop() {
     warmupDone      = false;
     cuttingActive   = false;
     pzem.resetEnergy();
-    lastEnergy      = 0;
+    lastEnergy = 0;
     String midJson = "{\"energy\":{\"today\":0,\"today_cost\":0},\"production\":{\"todaycuts\":0},\"production_history\":{\"" + todayKey + "\":{\"todaycuts\":0}},\"usage\":{\"" + todayKey + "\":{\"minutes\":0}}}";
     Database.update(aClient, "/PC_Monitor", object_t(midJson.c_str()), asyncCB, "midReset");
-    Serial.println("Midnight reset! " + prevDateKey + " -> " + todayKey);
+    Serial.println("Midnight reset! " + prev + " -> " + todayKey);
   }
 
   // Debounced state detection with hysteresis
@@ -329,12 +343,14 @@ void loop() {
       cuttingActive = false;
       Serial.println("Machine ON at " + ts);
       if (app.ready()) {
-        String evKey = String(time(nullptr));
+        String evKey  = String(time(nullptr));
         String onJson = "{";
         onJson += "\"status\":{\"pcState\":\"ON\",\"lastOn\":\"" + ts + "\"},";
         onJson += "\"events\":{\"" + dateKey + "\":{\"" + evKey + "\":{\"state\":\"ON\",\"time\":\"" + ts + "\",\"type\":\"machine\",\"desc\":\"Machine turned ON\"}}}";
         onJson += "}";
         Database.update(aClient, "/PC_Monitor", object_t(onJson.c_str()), asyncCB, "onTask");
+        delay(500); app.loop();
+        pruneEvents(dateKey);
       }
     } else {
       warmupDone    = false;
@@ -344,51 +360,49 @@ void loop() {
       todayUsageMin += usedMin;
       Serial.printf("Machine OFF at %s (%.1f min)\n", ts.c_str(), usedMin);
       if (app.ready()) {
-        String evKey = String(time(nullptr));
+        String evKey   = String(time(nullptr));
         String offJson = "{";
         offJson += "\"status\":{\"pcState\":\"OFF\",\"lastOff\":\"" + ts + "\"},";
         offJson += "\"usage\":{\"" + dateKey + "\":{\"minutes\":" + String(todayUsageMin, 1) + "}},";
         offJson += "\"events\":{\"" + dateKey + "\":{\"" + evKey + "\":{\"state\":\"OFF\",\"time\":\"" + ts + "\",\"type\":\"machine\",\"desc\":\"Machine turned OFF\",\"duration_min\":" + String(usedMin, 1) + "}}}";
         offJson += "}";
         Database.update(aClient, "/PC_Monitor", object_t(offJson.c_str()), asyncCB, "offTask");
+        delay(500); app.loop();
+        pruneEvents(dateKey);
       }
     }
   }
 
-  // ---------------- PRODUCTION COUNTING ----------------
+  // Production counting
   if (pcState) {
     if (!warmupDone && (millis() - machineOnTime >= MACHINE_WARMUP_MS)) {
       warmupDone = true;
       Serial.println("Warmup done. Production counting active.");
     }
-
     if (warmupDone) {
-      bool inCutZone = (current >= CUT_AMP_TRIGGER);
-      bool resetZone  = (current < CUT_AMP_RESET);
-
-      if (!cuttingActive && inCutZone) {
+      if (!cuttingActive && current >= CUT_AMP_TRIGGER) {
         cuttingActive = true;
         todayProduction++;
         totalProduction++;
         prodDirty = true;
         Serial.printf("CUT! Today:%ld  Total:%ld  I:%.2fA\n", todayProduction, totalProduction, current);
-      } else if (cuttingActive && resetZone) {
+      } else if (cuttingActive && current < CUT_AMP_RESET) {
         cuttingActive = false;
       }
     }
   }
 
-  // Regular update every 2s
+  // Regular update every 5s
   if (app.ready() && !updatePending && (millis() - lastUpdate > UPDATE_INTERVAL)) {
-    lastUpdate = millis();
+    lastUpdate    = millis();
     updatePending = true;
-    float todayCost = todayEnergy * 14.0;
-    float totalCost = totalEnergy * 14.0;
-    long  unixNow   = time(nullptr);
-    String dateKey  = getDateKey();
-
-    float runningMin = (pcState && pcOnSinceUnix > 0) ? (time(nullptr) - pcOnSinceUnix) / 60.0 : 0;
+    float todayCost     = todayEnergy * 14.0;
+    float totalCost     = totalEnergy * 14.0;
+    long  unixNow       = time(nullptr);
+    String dateKey      = getDateKey();
+    float runningMin    = (pcState && pcOnSinceUnix > 0) ? (time(nullptr) - pcOnSinceUnix) / 60.0 : 0;
     float totalUsageMin = todayUsageMin + runningMin;
+
     String json = "{";
     json += "\"live\":{\"voltage\":" + String(voltage, 2) + ",\"current\":" + String(current, 2) + ",\"power\":" + String(power, 2) + "},";
     json += "\"energy\":{\"today\":" + String(todayEnergy, 4) + ",\"today_cost\":" + String(todayCost, 2) + ",\"total\":" + String(totalEnergy, 4) + ",\"total_cost\":" + String(totalCost, 2) + "},";
