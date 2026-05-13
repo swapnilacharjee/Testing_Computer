@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSD Office PC Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #060818; --surface: rgba(255,255,255,0.04); --border: rgba(255,255,255,0.08);
+            --blue: #3b82f6; --cyan: #06b6d4; --green: #22c55e; --red: #ef4444;
+            --yellow: #facc15; --orange: #f97316; --text: #f1f5f9; --muted: #64748b;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        body::before {
+            content: ''; position: fixed; inset: 0; z-index: 0;
+            background: radial-gradient(ellipse 80% 50% at 20% 10%, rgba(59,130,246,0.10) 0%, transparent 60%),
+                        radial-gradient(ellipse 60% 40% at 80% 80%, rgba(6,182,212,0.08) 0%, transparent 60%);
+            pointer-events: none;
+        }
+        .wrap { position: relative; z-index: 1; max-width: 1300px; margin: 0 auto; padding: 24px 16px 50px; }
+        header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; flex-wrap: wrap; gap: 12px; }
+        .logo { display: flex; align-items: center; gap: 10px; }
+        .logo-icon { width: 42px; height: 42px; border-radius: 10px; background: linear-gradient(135deg, var(--blue), var(--cyan)); display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 0 20px rgba(59,130,246,0.4); }
+        .logo-text h1 { font-size: 18px; font-weight: 700; }
+        .logo-text p { font-size: 11px; color: var(--muted); }
+        .live-badge { display: flex; align-items: center; gap: 6px; background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.25); padding: 6px 14px; border-radius: 100px; font-size: 12px; color: var(--green); }
+        .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
+
+        /* PC Grid */
+        .pc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .pc-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 20px; backdrop-filter: blur(12px); transition: transform .2s; cursor: pointer; }
+        .pc-card:hover { transform: translateY(-2px); }
+        .pc-card.on  { border-color: rgba(34,197,94,0.3); box-shadow: 0 0 20px rgba(34,197,94,0.1); }
+        .pc-card.off { border-color: rgba(239,68,68,0.2); }
+        .pc-card.offline { border-color: rgba(100,116,139,0.3); opacity: 0.7; }
+        .pc-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+        .pc-name { font-size: 15px; font-weight: 700; }
+        .pc-badge { padding: 4px 12px; border-radius: 100px; font-size: 11px; font-weight: 700; }
+        .pc-badge.on  { background: rgba(34,197,94,0.15); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
+        .pc-badge.off { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+        .pc-badge.offline { background: rgba(100,116,139,0.15); color: var(--muted); border: 1px solid rgba(100,116,139,0.3); }
+        .pc-metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+        .pc-metric { background: rgba(255,255,255,0.03); border-radius: 10px; padding: 10px 8px; text-align: center; }
+        .pc-metric-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .pc-metric-val { font-size: 18px; font-weight: 700; }
+        .pc-metric-unit { font-size: 9px; color: var(--muted); }
+        .pc-metric.v .pc-metric-val { color: var(--cyan); }
+        .pc-metric.a .pc-metric-val { color: #d8b4fe; }
+        .pc-metric.w .pc-metric-val { color: var(--blue); }
+        .pc-footer { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 12px; flex-wrap: wrap; gap: 6px; }
+        .pc-footer span { display: flex; align-items: center; gap: 4px; }
+
+        /* Summary */
+        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
+        .sum-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px; backdrop-filter: blur(12px); position: relative; overflow: hidden; }
+        .sum-card::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+        .sum-card.blue::after   { background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+        .sum-card.green::after  { background: linear-gradient(90deg, var(--green), #86efac); }
+        .sum-card.yellow::after { background: linear-gradient(90deg, var(--yellow), #fde68a); }
+        .sum-card.orange::after { background: linear-gradient(90deg, var(--orange), #fed7aa); }
+        .sum-card.red::after    { background: linear-gradient(90deg, var(--red), #fca5a5); }
+        .sum-icon { font-size: 20px; margin-bottom: 8px; }
+        .sum-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 4px; }
+        .sum-val { font-size: 26px; font-weight: 700; line-height: 1; }
+        .sum-unit { font-size: 11px; color: var(--muted); margin-top: 3px; }
+        .sum-card.blue .sum-val   { color: var(--cyan); }
+        .sum-card.green .sum-val  { color: var(--green); }
+        .sum-card.yellow .sum-val { color: var(--yellow); }
+        .sum-card.orange .sum-val { color: var(--orange); }
+        .sum-card.red .sum-val    { color: var(--red); }
+
+        /* Charts & History */
+        .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+        .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 20px; backdrop-filter: blur(12px); }
+        .section-title { font-size: 14px; font-weight: 600; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
+        .section-title span { color: var(--muted); font-size: 11px; font-weight: 400; }
+        canvas { max-height: 200px; }
+        .history-card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 20px; backdrop-filter: blur(12px); }
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; min-width: 500px; border-collapse: collapse; font-size: 12px; }
+        thead tr { border-bottom: 1px solid var(--border); }
+        th { color: var(--muted); text-align: left; padding: 8px 10px; font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+        td { padding: 9px 10px; border-bottom: 1px solid rgba(255,255,255,0.02); }
+        tbody tr:hover { background: rgba(255,255,255,0.02); }
+        tbody tr:last-child td { border-bottom: none; }
+        .empty { text-align: center; color: var(--muted); padding: 20px; }
+        .badge { padding: 3px 10px; border-radius: 100px; font-size: 11px; font-weight: 600; }
+        footer { text-align: center; margin-top: 32px; color: var(--muted); font-size: 11px; }
+
+        @media(max-width:768px) {
+            .pc-grid { grid-template-columns: 1fr 1fr; }
+            .row2 { grid-template-columns: 1fr; }
+            .summary { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media(max-width:480px) {
+            .pc-grid { grid-template-columns: 1fr; }
+            .summary { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <header>
+        <div class="logo">
+            <div class="logo-icon">🖥️</div>
+            <div class="logo-text"><h1>SSD Office Monitor</h1><p>4 PC Power Monitoring System</p></div>
+        </div>
+        <div class="live-badge"><div class="live-dot"></div><span id="syncTime">Connecting...</span></div>
+    </header>
+
+    <!-- PC Cards -->
+    <div class="pc-grid" id="pcGrid">
+        <div class="pc-card offline" id="card-pc1">
+            <div class="pc-header"><span class="pc-name">💻 Saon PC</span><span class="pc-badge offline" id="badge-pc1">OFFLINE</span></div>
+            <div class="pc-metrics">
+                <div class="pc-metric v"><div class="pc-metric-label">Voltage</div><div class="pc-metric-val" id="v-pc1">--</div><div class="pc-metric-unit">V</div></div>
+                <div class="pc-metric a"><div class="pc-metric-label">Current</div><div class="pc-metric-val" id="a-pc1">--</div><div class="pc-metric-unit">A</div></div>
+                <div class="pc-metric w"><div class="pc-metric-label">Power</div><div class="pc-metric-val" id="w-pc1">--</div><div class="pc-metric-unit">W</div></div>
+            </div>
+            <div class="pc-footer">
+                <span>⚡ Today: <b id="e-pc1">--</b> kWh</span>
+                <span>💰 <b id="c-pc1">--</b> ৳</span>
+                <span>⏱ <b id="u-pc1">--</b> min</span>
+            </div>
+            <div class="pc-footer" style="margin-top:8px;border-top:none;padding-top:0">
+                <span>📶 <b id="wifi-pc1">--</b></span>
+                <span id="esp-pc1" style="font-weight:600">ESP: --</span>
+            </div>
+        </div>
+        <div class="pc-card offline" id="card-pc2">
+            <div class="pc-header"><span class="pc-name">💻 Swapnil PC</span><span class="pc-badge offline" id="badge-pc2">OFFLINE</span></div>
+            <div class="pc-metrics">
+                <div class="pc-metric v"><div class="pc-metric-label">Voltage</div><div class="pc-metric-val" id="v-pc2">--</div><div class="pc-metric-unit">V</div></div>
+                <div class="pc-metric a"><div class="pc-metric-label">Current</div><div class="pc-metric-val" id="a-pc2">--</div><div class="pc-metric-unit">A</div></div>
+                <div class="pc-metric w"><div class="pc-metric-label">Power</div><div class="pc-metric-val" id="w-pc2">--</div><div class="pc-metric-unit">W</div></div>
+            </div>
+            <div class="pc-footer">
+                <span>⚡ Today: <b id="e-pc2">--</b> kWh</span>
+                <span>💰 <b id="c-pc2">--</b> ৳</span>
+                <span>⏱ <b id="u-pc2">--</b> min</span>
+            </div>
+            <div class="pc-footer" style="margin-top:8px;border-top:none;padding-top:0">
+                <span>📶 <b id="wifi-pc2">--</b></span>
+                <span id="esp-pc2" style="font-weight:600">ESP: --</span>
+            </div>
+        </div>
+        <div class="pc-card offline" id="card-pc3">
+            <div class="pc-header"><span class="pc-name">💻 Santo PC</span><span class="pc-badge offline" id="badge-pc3">OFFLINE</span></div>
+            <div class="pc-metrics">
+                <div class="pc-metric v"><div class="pc-metric-label">Voltage</div><div class="pc-metric-val" id="v-pc3">--</div><div class="pc-metric-unit">V</div></div>
+                <div class="pc-metric a"><div class="pc-metric-label">Current</div><div class="pc-metric-val" id="a-pc3">--</div><div class="pc-metric-unit">A</div></div>
+                <div class="pc-metric w"><div class="pc-metric-label">Power</div><div class="pc-metric-val" id="w-pc3">--</div><div class="pc-metric-unit">W</div></div>
+            </div>
+            <div class="pc-footer">
+                <span>⚡ Today: <b id="e-pc3">--</b> kWh</span>
+                <span>💰 <b id="c-pc3">--</b> ৳</span>
+                <span>⏱ <b id="u-pc3">--</b> min</span>
+            </div>
+            <div class="pc-footer" style="margin-top:8px;border-top:none;padding-top:0">
+                <span>📶 <b id="wifi-pc3">--</b></span>
+                <span id="esp-pc3" style="font-weight:600">ESP: --</span>
+            </div>
+        </div>
+        <div class="pc-card offline" id="card-pc4">
+            <div class="pc-header"><span class="pc-name">💻 PC 4</span><span class="pc-badge offline" id="badge-pc4">OFFLINE</span></div>
+            <div class="pc-metrics">
+                <div class="pc-metric v"><div class="pc-metric-label">Voltage</div><div class="pc-metric-val" id="v-pc4">--</div><div class="pc-metric-unit">V</div></div>
+                <div class="pc-metric a"><div class="pc-metric-label">Current</div><div class="pc-metric-val" id="a-pc4">--</div><div class="pc-metric-unit">A</div></div>
+                <div class="pc-metric w"><div class="pc-metric-label">Power</div><div class="pc-metric-val" id="w-pc4">--</div><div class="pc-metric-unit">W</div></div>
+            </div>
+            <div class="pc-footer">
+                <span>⚡ Today: <b id="e-pc4">--</b> kWh</span>
+                <span>💰 <b id="c-pc4">--</b> ৳</span>
+                <span>⏱ <b id="u-pc4">--</b> min</span>
+            </div>
+            <div class="pc-footer" style="margin-top:8px;border-top:none;padding-top:0">
+                <span>📶 <b id="wifi-pc4">--</b></span>
+                <span id="esp-pc4" style="font-weight:600">ESP: --</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="summary">
+        <div class="sum-card green"><div class="sum-icon">🟢</div><div class="sum-label">PCs Online</div><div class="sum-val" id="sumOnline">0</div><div class="sum-unit">of 4</div></div>
+        <div class="sum-card blue"><div class="sum-icon">⚡</div><div class="sum-label">Total Power</div><div class="sum-val" id="sumPower">0</div><div class="sum-unit">Watts</div></div>
+        <div class="sum-card yellow"><div class="sum-icon">🔋</div><div class="sum-label">Today Energy</div><div class="sum-val" id="sumEnergy">0.000</div><div class="sum-unit">kWh</div></div>
+        <div class="sum-card orange"><div class="sum-icon">💰</div><div class="sum-label">Today Cost</div><div class="sum-val" id="sumCost">0.00</div><div class="sum-unit">৳</div></div>
+        <div class="sum-card red"><div class="sum-icon">📊</div><div class="sum-label">Total Energy</div><div class="sum-val" id="sumTotalEnergy">0.000</div><div class="sum-unit">kWh</div></div>
+        <div class="sum-card orange"><div class="sum-icon">🧾</div><div class="sum-label">Total Cost</div><div class="sum-val" id="sumTotalCost">0.00</div><div class="sum-unit">৳</div></div>
+    </div>
+
+    <!-- Charts -->
+    <div class="row2">
+        <div class="chart-card">
+            <div class="section-title">Today Usage <span>minutes per PC</span></div>
+            <canvas id="usageChart"></canvas>
+        </div>
+        <div class="chart-card">
+            <div class="section-title">Today Energy <span>kWh per PC</span></div>
+            <canvas id="energyChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Event History -->
+    <div class="history-card">
+        <div class="section-title">Event History <span>Last 20 events</span></div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>PC</th><th>Date</th><th>Time</th><th>Event</th><th>Description</th><th>Duration</th></tr></thead>
+                <tbody id="historyBody"><tr><td colspan="6" class="empty">Loading...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+    <footer>SSD Office Monitor · ESP32 + PZEM-004T · Firebase RTDB</footer>
+</div>
+
+<script>
+    const DB_URL = "https://ssd-room-default-rtdb.asia-southeast1.firebasedatabase.app";
+    const DB_SECRET = "aHN0Qd5S91tqw2O97c1YpK8NrRCgyi2Lyf9iaVf4";
+    const PCS = [
+        { id: 'pc1', name: 'Saon PC',    path: '/Office_Monitor/pc1' },
+        { id: 'pc2', name: 'Swapnil PC', path: '/Office_Monitor/pc2' },
+        { id: 'pc3', name: 'Santo PC',   path: '/Office_Monitor/pc3' },
+        { id: 'pc4', name: 'PC 4',       path: '/Office_Monitor/pc4' },
+    ];
+
+    let usageChart = null, energyChart = null;
+
+    function dbFetch(path) { return fetch(`${DB_URL}${path}?auth=${DB_SECRET}`).then(r => r.json()); }
+    function getTodayKey() { const d = new Date(Date.now() + 6*3600*1000); return d.toISOString().slice(0,10); }
+
+    function updatePcCard(id, data) {
+        const card   = document.getElementById('card-' + id);
+        const badge  = document.getElementById('badge-' + id);
+        if (!data) return;
+
+        const isOnline = data.esp32 && data.esp32.last_seen_unix
+            ? (Date.now()/1000 - data.esp32.last_seen_unix) < 30 : false;
+        const pcOn = isOnline && data.status && data.status.pcState === 'ON';
+
+        // Card state
+        card.className = 'pc-card ' + (isOnline ? (pcOn ? 'on' : 'off') : 'offline');
+        badge.className = 'pc-badge ' + (isOnline ? (pcOn ? 'on' : 'off') : 'offline');
+        badge.textContent = isOnline ? (pcOn ? 'ON' : 'OFF') : 'OFFLINE';
+
+        // Live metrics
+        if (data.live) {
+            document.getElementById('v-' + id).textContent = (data.live.voltage || 0).toFixed(1);
+            document.getElementById('a-' + id).textContent = (data.live.current || 0).toFixed(2);
+            document.getElementById('w-' + id).textContent = (data.live.power   || 0).toFixed(1);
+        }
+
+        // WiFi & ESP status
+        const wifiEl = document.getElementById('wifi-' + id);
+        const espEl  = document.getElementById('esp-' + id);
+        if (data.esp32) {
+            wifiEl.textContent = data.esp32.wifi_ssid || '--';
+            if (isOnline) {
+                espEl.textContent = 'ESP: Online';
+                espEl.style.color = '#22c55e';
+            } else {
+                espEl.textContent = 'ESP: Offline';
+                espEl.style.color = '#ef4444';
+            }
+        } else {
+            wifiEl.textContent = '--';
+            espEl.textContent = 'ESP: Offline';
+            espEl.style.color = '#ef4444';
+        }
+
+        // Energy & usage
+        const todayE = data.energy ? (data.energy.today || 0) : 0;
+        const todayC = todayE * 15;
+        const todayKey = getTodayKey();
+        const usageMin = data.usage && data.usage[todayKey] ? (data.usage[todayKey].minutes || 0) : 0;
+
+        document.getElementById('e-' + id).textContent = todayE.toFixed(3);
+        document.getElementById('c-' + id).textContent = todayC.toFixed(2);
+        document.getElementById('u-' + id).textContent = usageMin.toFixed(0);
+    }
+
+    function updateSummary(allData) {
+        let online = 0, totalPower = 0, totalEnergy = 0, totalCost = 0, grandTotal = 0;
+        allData.forEach(d => {
+            if (!d) return;
+            const isOnline = d.esp32 && d.esp32.last_seen_unix
+                ? (Date.now()/1000 - d.esp32.last_seen_unix) < 30 : false;
+            if (isOnline) online++;
+            if (d.live) totalPower += d.live.power || 0;
+            if (d.energy) {
+                totalEnergy += d.energy.today || 0;
+                grandTotal  += d.energy.total || 0;
+            }
+        });
+        totalCost = totalEnergy * 15;
+        document.getElementById('sumOnline').textContent     = online;
+        document.getElementById('sumPower').textContent      = totalPower.toFixed(1);
+        document.getElementById('sumEnergy').textContent     = totalEnergy.toFixed(3);
+        document.getElementById('sumCost').textContent       = totalCost.toFixed(2);
+        document.getElementById('sumTotalEnergy').textContent = grandTotal.toFixed(3);
+        document.getElementById('sumTotalCost').textContent   = (grandTotal * 15).toFixed(2);
+    }
+
+    function updateCharts(allData) {
+        const labels = PCS.map(p => p.name);
+        const todayKey = getTodayKey();
+        const usageVals = allData.map(d => d && d.usage && d.usage[todayKey] ? (d.usage[todayKey].minutes || 0) : 0);
+        const energyVals = allData.map(d => d && d.energy ? (d.energy.today || 0) : 0);
+
+        const colors = ['rgba(59,130,246,0.8)', 'rgba(34,197,94,0.8)', 'rgba(250,204,21,0.8)', 'rgba(249,115,22,0.8)'];
+
+        if (usageChart) usageChart.destroy();
+        usageChart = new Chart(document.getElementById('usageChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels, datasets: [{ data: usageVals, backgroundColor: colors, borderRadius: 8, borderSkipped: false }] },
+            options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.parsed.y.toFixed(0)} min` } } },
+                scales: { x: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255,255,255,0.03)' } }, y: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true } } }
+        });
+
+        if (energyChart) energyChart.destroy();
+        energyChart = new Chart(document.getElementById('energyChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels, datasets: [{ data: energyVals, backgroundColor: colors, borderRadius: 8, borderSkipped: false }] },
+            options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.parsed.y.toFixed(4)} kWh` } } },
+                scales: { x: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255,255,255,0.03)' } }, y: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true } } }
+        });
+    }
+
+    function updateHistory(allData) {
+        const tbody = document.getElementById('historyBody');
+        const rows = [];
+        PCS.forEach((pc, i) => {
+            const d = allData[i];
+            if (!d || !d.events) return;
+            Object.keys(d.events).forEach(date => {
+                const dateEvents = d.events[date];
+                if (typeof dateEvents === 'object') {
+                    Object.values(dateEvents).forEach(ev => {
+                        if (typeof ev === 'object') rows.push({ pcName: pc.name, date, ...ev });
+                    });
+                }
+            });
+        });
+        rows.sort((a, b) => (b.time || '').localeCompare(a.time || ''));
+        if (!rows.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty">No events yet</td></tr>'; return; }
+        tbody.innerHTML = rows.slice(0, 20).map(ev => {
+            const isOn = ev.state === 'ON';
+            const color  = isOn ? '#22c55e' : '#ef4444';
+            const bg     = isOn ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)';
+            const border = isOn ? 'rgba(34,197,94,0.3)'  : 'rgba(239,68,68,0.3)';
+            return `<tr>
+                <td style="color:#67e8f9;font-weight:600">${ev.pcName}</td>
+                <td style="color:#94a3b8">${ev.date || '--'}</td>
+                <td style="font-weight:500">${ev.time ? ev.time.slice(11,19) : '--'}</td>
+                <td><span class="badge" style="background:${bg};color:${color};border:1px solid ${border}">${ev.state || '--'}</span></td>
+                <td style="color:#cbd5e1;font-size:11px">${ev.desc || '--'}</td>
+                <td style="color:#64748b">${ev.duration_min ? ev.duration_min.toFixed(1) + ' min' : '—'}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function fetchAll() {
+        Promise.all(PCS.map(pc => dbFetch(pc.path + '.json'))).then(allData => {
+            PCS.forEach((pc, i) => updatePcCard(pc.id, allData[i]));
+            updateSummary(allData);
+            updateCharts(allData);
+            updateHistory(allData);
+            document.getElementById('syncTime').textContent = 'Live · ' + new Date().toLocaleTimeString();
+        }).catch(() => { document.getElementById('syncTime').textContent = 'Error'; });
+    }
+
+    fetchAll();
+    setInterval(fetchAll, 5000);
+</script>
+</body>
+</html>
